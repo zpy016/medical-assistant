@@ -18,58 +18,61 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # ─── 构建前端 ───
       - name: 📦 Build frontend
         run: |
           npm ci
           npm run build
-          echo "=== dist contents ==="
-          ls -la dist/
-          ls -la dist/assets/
-          echo "=== index.html refs ==="
-          grep -o 'src="[^"]*"' dist/index.html || true
-          grep -o 'href="[^"]*"' dist/index.html || true
+          echo "=== dist tree ==="
+          find dist -type f | sort
+
+      # ─── 打包成 tar.gz（单文件传输，最可靠）───
+      - name: 📦 Pack frontend & backend
+        run: |
+          cd dist && tar czf ../frontend.tar.gz . && cd ..
+          cd server && tar czf ../backend.tar.gz . && cd ..
+          echo "=== frontend.tar.gz contents ==="
+          tar tzf frontend.tar.gz | sort
+          echo "=== backend.tar.gz contents ==="
+          tar tzf backend.tar.gz | sort
 
       - name: 📦 Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      # ─── 部署前端 ───
-      - name: 🚀 Deploy frontend (scp -r dist/.)
-        run: |
-          echo "=== Uploading dist/. to /var/www/medical/ ==="
-          sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
-            scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -r dist/. ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/var/www/medical/
-          echo "=== scp exit code: $? ==="
-
-      # ─── 部署后端 ───
-      - name: 🚀 Deploy backend (scp -r server/.)
+      # ─── scp 上传 tar.gz（单文件，无 glob 问题）───
+      - name: 🚀 Upload archives
         run: |
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
             scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -r server/. ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/opt/medical-server/
+            frontend.tar.gz backend.tar.gz \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/tmp/
 
-      # ─── 服务器端配置 + 验证 ───
-      - name: 🔄 Configure & verify
+      # ─── SSH 解压 + 配置 + 验证 ───
+      - name: 🔄 Extract & configure server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            echo "=== /var/www/medical/ ==="
-            ls -la /var/www/medical/
-            echo "=== /var/www/medical/assets/ ==="
-            ls -la /var/www/medical/assets/ || echo "ASSETS MISSING"
-            echo "=== file permissions ==="
-            stat /var/www/medical/index.html || true
-            stat /var/www/medical/assets/*.js /var/www/medical/assets/*.css 2>/dev/null || true
+            set -e
+            echo "========== DEPLOY START =========="
 
-            # 权限修复
-            chown -R root:root /var/www/medical
-            chmod -R 755 /var/www/medical
+            # ── 前端 ──
+            echo "[1/5] Extracting frontend..."
+            mkdir -p /var/www/medical
+            rm -rf /var/www/medical/*
+            cd /var/www/medical
+            tar xzf /tmp/frontend.tar.gz
+            echo "--- frontend files ---"
+            find . -type f | sort
 
             # ── 后端 ──
+            echo "[2/5] Extracting backend..."
+            mkdir -p /opt/medical-server
+            rm -rf /opt/medical-server/*
             cd /opt/medical-server
+            tar xzf /tmp/backend.tar.gz
             cat > .env << 'EOF'
             VOLC_AK=${{ secrets.VOLC_AK }}
             VOLC_SK=${{ secrets.VOLC_SK }}
@@ -78,14 +81,19 @@ jobs:
             EOF
             npm install --production 2>/dev/null || true
 
-            if [ ! -f /etc/systemd/system/medical-backend.service ]; then
-              cp medical-backend.service /etc/systemd/system/ 2>/dev/null || true
+            # ── systemd ──
+            echo "[3/5] Configuring systemd..."
+            if [ -f /opt/medical-server/medical-backend.service ]; then
+              cp /opt/medical-server/medical-backend.service /etc/systemd/system/ 2>/dev/null || true
               systemctl daemon-reload 2>/dev/null || true
               systemctl enable medical-backend 2>/dev/null || true
             fi
             systemctl restart medical-backend 2>/dev/null || true
+            sleep 2
+            systemctl status medical-backend --no-pager 2>/dev/null || true
 
             # ── Nginx ──
+            echo "[4/5] Configuring Nginx..."
             cat > /etc/nginx/sites-available/medical << 'EOF'
             server {
                 listen 8050;
@@ -116,9 +124,14 @@ jobs:
             ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
             nginx -t && systemctl restart nginx
 
-            echo ""
-            echo "=== curl test ==="
-            curl -s -o /dev/null -w "index.html: %{http_code}\n" http://127.0.0.1:8050/
-            curl -s -o /dev/null -w "JS: %{http_code}\n" http://127.0.0.1:8050/assets/index-*.js || true
-            curl -s -o /dev/null -w "CSS: %{http_code}\n" http://127.0.0.1:8050/assets/index-*.css || true
-            echo "✅ Done"
+            # ── 验证 ──
+            echo "[5/5] Verifying..."
+            echo "--- HTTP status checks ---"
+            curl -s -o /dev/null -w "index.html:  %{http_code}\n" http://127.0.0.1:8050/
+            JS=$(find /var/www/medical/assets -name '*.js' | head -1)
+            CSS=$(find /var/www/medical/assets -name '*.css' | head -1)
+            curl -s -o /dev/null -w "JS:        %{http_code}  ($JS)\n" "http://127.0.0.1:8050${JS#/var/www/medical}" || true
+            curl -s -o /dev/null -w "CSS:       %{http_code}  ($CSS)\n" "http://127.0.0.1:8050${CSS#/var/www/medical}" || true
+            curl -s -o /dev/null -w "API:       %{http_code}\n" http://127.0.0.1:8050/api/health || true
+
+            echo "========== DEPLOY DONE =========="
