@@ -118,6 +118,91 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_family_members_user ON family_members(user_id);
   `);
 
+  // 用药提醒表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS medications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      specification TEXT,
+      dosage TEXT,
+      frequency TEXT NOT NULL,
+      times TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT,
+      route TEXT,
+      notes TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_medications_user ON medications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_medications_patient ON medications(patient_id);
+  `);
+
+  // 服药打卡记录表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS medication_logs (
+      id TEXT PRIMARY KEY,
+      medication_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      scheduled_time TEXT NOT NULL,
+      taken_at INTEGER,
+      status TEXT NOT NULL,
+      notes TEXT,
+      FOREIGN KEY (medication_id) REFERENCES medications(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_med_logs_patient ON medication_logs(patient_id);
+  `);
+
+  // 复查提醒表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS follow_up_reminders (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      test_item_name TEXT NOT NULL,
+      abnormal_value TEXT,
+      reference_range TEXT,
+      abnormal_direction TEXT,
+      follow_up_date TEXT NOT NULL,
+      reminder_days INTEGER DEFAULT 3,
+      is_completed INTEGER DEFAULT 0,
+      completed_at INTEGER,
+      notes TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_followups_user ON follow_up_reminders(user_id);
+    CREATE INDEX IF NOT EXISTS idx_followups_patient ON follow_up_reminders(patient_id);
+  `);
+
+  // 疫苗接种记录表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vaccination_records (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL,
+      vaccine_id TEXT NOT NULL,
+      vaccine_name TEXT NOT NULL,
+      dose_number INTEGER NOT NULL,
+      scheduled_date TEXT NOT NULL,
+      actual_date TEXT,
+      status TEXT NOT NULL,
+      vaccination_site TEXT,
+      batch_number TEXT,
+      manufacturer TEXT,
+      reaction TEXT,
+      image_url TEXT,
+      category TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_vaccines_patient ON vaccination_records(patient_id);
+  `);
+
   console.log('[DB] Database initialized at', DB_PATH);
 }
 
@@ -290,7 +375,13 @@ function exportUserData(userId) {
   const visitEvents = getVisitEventsByUser(userId);
   const familyMembers = getFamilyMembersByUser(userId);
 
-  return { patients, records, visitEvents, familyMembers };
+  // P1 新增表查询
+  const medications = db.prepare('SELECT * FROM medications WHERE user_id = ?').all(userId);
+  const medicationLogs = db.prepare('SELECT * FROM medication_logs WHERE patient_id IN (SELECT id FROM patients WHERE user_id = ?)').all(userId);
+  const followUps = db.prepare('SELECT * FROM follow_up_reminders WHERE user_id = ?').all(userId);
+  const vaccinations = db.prepare('SELECT * FROM vaccination_records WHERE patient_id IN (SELECT id FROM patients WHERE user_id = ?)').all(userId);
+
+  return { patients, records, visitEvents, familyMembers, medications, medicationLogs, followUps, vaccinations };
 }
 
 module.exports = {

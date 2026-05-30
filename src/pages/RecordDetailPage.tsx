@@ -9,6 +9,7 @@ import { useRecordStore } from '../stores/recordStore';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db as database } from '../db';
 import { formatDate, getDocumentTypeLabel, DOCUMENT_TYPE_CONFIG } from '../utils/helpers';
+import { analyzeTestItem, getSeverityColor } from '../utils/labAnalyzer';
 import type { DocumentType } from '../types';
 import { ArrowLeft, FileText, FlaskConical, Scan, Pill, Receipt, Trash2, Star, StarOff, AlertTriangle } from 'lucide-react';
 
@@ -47,7 +48,11 @@ export default function RecordDetailPage() {
   const Icon = DOC_ICON_MAP[record.documentType] ?? FileText;
   const config = DOCUMENT_TYPE_CONFIG[record.documentType];
   const data = record.structuredData;
-  const abnormalItems = data?.testItems?.filter(t => t.isAbnormal) ?? [];
+  const analyzedItems = data?.testItems?.map(item => ({
+    item,
+    analysis: analyzeTestItem(item),
+  })) ?? [];
+  const abnormalItems = analyzedItems.filter(({ analysis }) => analysis.isAbnormal);
 
   const handleDelete = async () => {
     if (confirm('确定要删除这份病历吗？此操作不可恢复。')) {
@@ -173,19 +178,34 @@ export default function RecordDetailPage() {
                 {data.testItems && data.testItems.length > 0 && (
                   <InfoSection title={`检验项目 (${data.testItems.length}项)`}>
                     {abnormalItems.length > 0 && (
-                      <div className="mb-3 p-2.5 bg-red-50 rounded-lg flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 text-[var(--color-danger)] flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-[var(--color-danger)]">
-                          发现 {abnormalItems.length} 项异常指标，建议关注
-                        </p>
+                      <div className="mb-3 p-2.5 bg-red-50 rounded-lg flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-[var(--color-danger)] flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-[var(--color-danger)]">
+                            发现 {abnormalItems.length} 项异常指标，建议关注
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => navigate('/abnormal-tests')}
+                          className="text-xs text-[var(--color-primary)] font-medium whitespace-nowrap"
+                        >
+                          查看全部 →
+                        </button>
                       </div>
                     )}
                     <div className="space-y-2">
-                      {data.testItems.map((item, i) => (
+                      {analyzedItems.map(({ item, analysis }, i) => (
                         <div
                           key={i}
+                          onClick={() => {
+                            if (analysis.isAbnormal) {
+                              navigate(`/abnormal-test/${record.id}/${encodeURIComponent(item.name)}`);
+                            }
+                          }}
                           className={`flex items-center justify-between p-2.5 rounded-lg text-xs ${
-                            item.isAbnormal ? 'bg-red-50/50 border border-red-100' : 'bg-[var(--color-bg)]'
+                            analysis.isAbnormal
+                              ? 'bg-red-50/50 border border-red-100 cursor-pointer touch-feedback active:scale-[0.99]'
+                              : 'bg-[var(--color-bg)]'
                           }`}
                         >
                           <div>
@@ -193,9 +213,9 @@ export default function RecordDetailPage() {
                             {item.nameEn && <p className="text-[var(--color-text-muted)]">{item.nameEn}</p>}
                           </div>
                           <div className="text-right">
-                            <p className={`font-semibold ${item.isAbnormal ? 'text-[var(--color-danger)]' : ''}`}>
+                            <p className="font-semibold" style={{ color: analysis.isAbnormal ? getSeverityColor(analysis.severity) : undefined }}>
                               {item.result}
-                              {item.isAbnormal && (item.abnormalDirection === 'high' ? ' ↑' : ' ↓')}
+                              {analysis.isAbnormal && (analysis.direction === 'high' ? ' ↑' : ' ↓')}
                             </p>
                             <p className="text-[var(--color-text-muted)]">
                               {item.unit} · 参考: {item.referenceRange}

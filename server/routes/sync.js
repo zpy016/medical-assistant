@@ -20,10 +20,8 @@ const router = express.Router();
 router.post('/upload', authMiddleware, (req, res) => {
   try {
     const userId = req.userId;
-    const { patients, records, visitEvents, familyMembers } = req.body;
+    const { patients, records, visitEvents, familyMembers, medications, medicationLogs, followUps, vaccinations } = req.body;
 
-    // 简单策略：先删除旧数据，再插入新数据
-    // 注意：生产环境应该用更精细的合并策略
     const db = require('../database').db;
 
     db.transaction(() => {
@@ -32,6 +30,10 @@ router.post('/upload', authMiddleware, (req, res) => {
       db.prepare('DELETE FROM records WHERE user_id = ?').run(userId);
       db.prepare('DELETE FROM visit_events WHERE user_id = ?').run(userId);
       db.prepare('DELETE FROM family_members WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM medications WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM medication_logs WHERE patient_id IN (SELECT id FROM patients WHERE user_id = ?)').run(userId);
+      db.prepare('DELETE FROM follow_up_reminders WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM vaccination_records WHERE patient_id IN (SELECT id FROM patients WHERE user_id = ?)').run(userId);
 
       // 插入患者
       if (patients && Array.isArray(patients)) {
@@ -60,6 +62,56 @@ router.post('/upload', authMiddleware, (req, res) => {
           createFamilyMember({ ...m, userId });
         }
       }
+
+      // 插入用药提醒
+      if (medications && Array.isArray(medications)) {
+        const stmt = db.prepare(`
+          INSERT INTO medications (id, user_id, patient_id, name, specification, dosage, frequency, times, start_date, end_date, route, notes, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const m of medications) {
+          stmt.run(m.id, userId, m.patientId, m.name, m.specification || null, m.dosage || null,
+            m.frequency, JSON.stringify(m.times), m.startDate, m.endDate || null,
+            m.route || null, m.notes || null, m.isActive ? 1 : 0, m.createdAt, m.updatedAt);
+        }
+      }
+
+      // 插入服药打卡
+      if (medicationLogs && Array.isArray(medicationLogs)) {
+        const stmt = db.prepare(`
+          INSERT INTO medication_logs (id, medication_id, patient_id, scheduled_time, taken_at, status, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const l of medicationLogs) {
+          stmt.run(l.id, l.medicationId, l.patientId, l.scheduledTime, l.takenAt || null, l.status, l.notes || null);
+        }
+      }
+
+      // 插入复查提醒
+      if (followUps && Array.isArray(followUps)) {
+        const stmt = db.prepare(`
+          INSERT INTO follow_up_reminders (id, user_id, patient_id, record_id, test_item_name, abnormal_value, reference_range, abnormal_direction, follow_up_date, reminder_days, is_completed, completed_at, notes, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const f of followUps) {
+          stmt.run(f.id, userId, f.patientId, f.recordId, f.testItemName, f.abnormalValue, f.referenceRange,
+            f.abnormalDirection, f.followUpDate, f.reminderDays, f.isCompleted ? 1 : 0,
+            f.completedAt || null, f.notes || null, f.createdAt);
+        }
+      }
+
+      // 插入疫苗记录
+      if (vaccinations && Array.isArray(vaccinations)) {
+        const stmt = db.prepare(`
+          INSERT INTO vaccination_records (id, patient_id, vaccine_id, vaccine_name, dose_number, scheduled_date, actual_date, status, vaccination_site, batch_number, manufacturer, reaction, image_url, category, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const v of vaccinations) {
+          stmt.run(v.id, v.patientId, v.vaccineId, v.vaccineName, v.doseNumber, v.scheduledDate,
+            v.actualDate || null, v.status, v.vaccinationSite || null, v.batchNumber || null,
+            v.manufacturer || null, v.reaction || null, v.imageUrl || null, v.category, v.createdAt, v.updatedAt);
+        }
+      }
     })();
 
     res.json({ success: true, message: 'Data uploaded successfully' });
@@ -82,6 +134,10 @@ router.get('/download', authMiddleware, (req, res) => {
         records: data.records,
         visitEvents: data.visitEvents,
         familyMembers: data.familyMembers,
+        medications: data.medications,
+        medicationLogs: data.medicationLogs,
+        followUps: data.followUps,
+        vaccinations: data.vaccinations,
         downloadedAt: new Date().toISOString(),
       },
     });
@@ -100,6 +156,8 @@ router.get('/status', authMiddleware, (req, res) => {
     const patientCount = db.prepare('SELECT COUNT(*) as c FROM patients WHERE user_id = ?').get(userId).c;
     const recordCount = db.prepare('SELECT COUNT(*) as c FROM records WHERE user_id = ?').get(userId).c;
     const visitEventCount = db.prepare('SELECT COUNT(*) as c FROM visit_events WHERE user_id = ?').get(userId).c;
+    const medicationCount = db.prepare('SELECT COUNT(*) as c FROM medications WHERE user_id = ?').get(userId).c;
+    const followUpCount = db.prepare('SELECT COUNT(*) as c FROM follow_up_reminders WHERE user_id = ?').get(userId).c;
 
     res.json({
       success: true,
@@ -107,6 +165,8 @@ router.get('/status', authMiddleware, (req, res) => {
         patients: patientCount,
         records: recordCount,
         visitEvents: visitEventCount,
+        medications: medicationCount,
+        followUps: followUpCount,
       },
     });
   } catch (error) {

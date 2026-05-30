@@ -14,6 +14,7 @@ import {
   AlertCircle, Calendar, MapPin, Filter, X, Stethoscope,
   Building2, Clock, Check
 } from 'lucide-react';
+import TodayMedicationWidget from '../components/TodayMedicationWidget';
 
 const DOC_ICONS: Record<string, typeof FileText> = {
   medical_record: FileText,
@@ -215,6 +216,9 @@ export default function TimelinePage() {
           </div>
         </div>
       </div>
+
+      {/* 今日用药 Widget */}
+      <TodayMedicationWidget />
 
       {/* 筛选栏 */}
       <div className="px-4 mt-3 flex items-center gap-2">

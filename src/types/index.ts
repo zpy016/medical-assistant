@@ -45,6 +45,7 @@ export interface Patient {
   phone?: string;
   avatar?: string;
   isDefault: boolean;
+  isChild?: boolean;          // 是否儿童（用于疫苗管理）
   createdAt: number;
   updatedAt: number;
 }
@@ -255,6 +256,123 @@ export interface NavItem {
   label: string;
   icon: string;
   path: string;
+}
+
+// ==================== P1-03: 体检异常标记 + 复查提醒 ====================
+
+/** 检验分析结果 */
+export interface TestItemAnalysis {
+  isAbnormal: boolean;
+  direction: 'high' | 'low' | null;
+  severity: 'mild' | 'moderate' | 'severe' | null;
+  numericValue: number | null;
+  numericMin: number | null;
+  numericMax: number | null;
+}
+
+/** 复查提醒 */
+export interface FollowUpReminder {
+  id: string;
+  patientId: string;
+  recordId: string;
+  testItemName: string;
+  abnormalValue: string;
+  referenceRange: string;
+  abnormalDirection: 'high' | 'low';
+  followUpDate: string;
+  reminderDays: number;
+  isCompleted: boolean;
+  completedAt?: number;
+  notes?: string;
+  createdAt: number;
+}
+
+// ==================== P1-05: 疫苗管理 ====================
+
+/** 疫苗接种记录 */
+export interface VaccinationRecord {
+  id: string;
+  patientId: string;
+  vaccineId: string;
+  vaccineName: string;
+  doseNumber: number;
+  scheduledDate: string;
+  actualDate?: string;
+  status: 'pending' | 'completed' | 'overdue' | 'skipped';
+  vaccinationSite?: string;
+  batchNumber?: string;
+  manufacturer?: string;
+  reaction?: string;
+  imageUrl?: string;
+  category: 'national' | 'optional';
+  createdAt: number;
+  updatedAt: number;
+}
+
+// ==================== P1-01: 用药提醒 + 依从性追踪 ====================
+
+/** 服药频率 */
+export type MedicationFrequency =
+  | 'once_daily'
+  | 'twice_daily'
+  | 'three_times'
+  | 'four_times'
+  | 'before_bed'
+  | 'every_other_day'
+  | 'weekly'
+  | 'as_needed'
+  | 'custom';
+
+/** 用药提醒时间 */
+export interface MedicationReminderTime {
+  hour: number;
+  minute: number;
+  label: string;
+}
+
+/** 药物 */
+export interface MedicationReminder {
+  id: string;
+  patientId: string;
+  name: string;
+  specification?: string;
+  dosage?: string;
+  frequency: MedicationFrequency;
+  times: MedicationReminderTime[];
+  startDate: string;
+  endDate?: string;
+  route?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 服药打卡记录 */
+export interface MedicationLog {
+  id: string;
+  medicationId: string;
+  patientId: string;
+  scheduledTime: string; // YYYY-MM-DD HH:mm
+  takenAt?: number;
+  status: 'taken' | 'missed' | 'skipped' | 'pending';
+  notes?: string;
+}
+
+/** 依从性周报 */
+export interface AdherenceWeek {
+  weekStart: string;
+  weekEnd: string;
+  totalScheduled: number;
+  totalTaken: number;
+  totalMissed: number;
+  adherenceRate: number;
+  dailyBreakdown: {
+    date: string;
+    scheduled: number;
+    taken: number;
+    rate: number;
+  }[];
 }
 
 /** 统计概览 */

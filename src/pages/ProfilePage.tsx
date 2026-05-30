@@ -13,7 +13,8 @@ import {
   Users, Download, Trash2, Settings, Shield,
   ChevronRight, FileJson, FileSpreadsheet, AlertTriangle,
   Plus, X, Check, UserPlus, Eye, Pencil, UserCog,
-  Cloud, CloudOff, LogOut, LogIn, RefreshCw
+  Cloud, CloudOff, LogOut, LogIn, RefreshCw,
+  FlaskConical, Pill, Syringe, HeartPulse, Activity
 } from 'lucide-react';
 
 const RELATION_OPTIONS = [
@@ -260,6 +261,13 @@ export default function ProfilePage() {
               </div>
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => navigate(`/family-dashboard/${member.patientId}`)}
+                  className="p-1.5 bg-blue-50 text-blue-500 rounded-lg"
+                  title="健康看板"
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                </button>
+                <button
                   onClick={() => updateFamilyMemberPermission(member.id, member.permission === 'view' ? 'edit' : 'view')}
                   className={`p-1.5 rounded-lg transition-colors ${
                     member.permission === 'edit'
@@ -334,6 +342,63 @@ export default function ProfilePage() {
               添加家庭成员
             </button>
           )}
+        </div>
+      </div>
+
+      {/* 健康管理入口 */}
+      <div className="px-4 mb-6">
+        <div className="bg-white rounded-xl border border-[var(--color-border)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--color-border)]/50">
+            <span className="text-sm font-semibold">健康管理</span>
+          </div>
+
+          <button
+            onClick={() => navigate('/abnormal-tests')}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[var(--color-bg)]/50 border-b border-[var(--color-border)]/30"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center">
+                <FlaskConical className="w-4.5 h-4.5 text-[var(--color-danger)]" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium">异常指标</p>
+                <p className="text-xs text-[var(--color-text-muted)]">查看检验异常与复查提醒</p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)]" />
+          </button>
+
+          <button
+            onClick={() => navigate('/medications')}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[var(--color-bg)]/50 border-b border-[var(--color-border)]/30"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center">
+                <Pill className="w-4.5 h-4.5 text-[var(--color-primary)]" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium">用药管理</p>
+                <p className="text-xs text-[var(--color-text-muted)]">服药提醒与依从性追踪</p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)]" />
+          </button>
+
+          <button
+            onClick={() => navigate('/vaccines')}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-[var(--color-bg)]/50"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                <Syringe className="w-4.5 h-4.5 text-[var(--color-secondary)]" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium">疫苗接种</p>
+                <p className="text-xs text-[var(--color-text-muted)]">儿童疫苗计划与记录</p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)]" />
+          </button>
         </div>
       </div>
 

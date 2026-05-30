@@ -17,6 +17,13 @@ import ProfilePage from './pages/ProfilePage';
 import RecordDetailPage from './pages/RecordDetailPage';
 import OCRConfirmPage from './pages/OCRConfirmPage';
 import LoginPage from './pages/LoginPage';
+import AbnormalTestsPage from './pages/AbnormalTestsPage';
+import AbnormalTestDetailPage from './pages/AbnormalTestDetailPage';
+import MedicationsPage from './pages/MedicationsPage';
+import MedicationFormPage from './pages/MedicationFormPage';
+import MedicationStatsPage from './pages/MedicationStatsPage';
+import FamilyDashboardPage from './pages/FamilyDashboardPage';
+import VaccinesPage from './pages/VaccinesPage';
 import { initDemoData } from './utils/demoData';
 import { isLoggedIn } from './services/syncService';
 
@@ -65,6 +72,14 @@ function App() {
             <Route path="/record/:id" element={<RecordDetailPage />} />
             <Route path="/ocr-confirm/:taskId" element={<OCRConfirmPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/abnormal-tests" element={<AbnormalTestsPage />} />
+            <Route path="/abnormal-test/:recordId/:itemName" element={<AbnormalTestDetailPage />} />
+            <Route path="/medications" element={<MedicationsPage />} />
+            <Route path="/medication/:id/edit" element={<MedicationFormPage />} />
+            <Route path="/medication/new" element={<MedicationFormPage />} />
+            <Route path="/medication/stats" element={<MedicationStatsPage />} />
+            <Route path="/family-dashboard/:patientId" element={<FamilyDashboardPage />} />
+            <Route path="/vaccines" element={<VaccinesPage />} />
             <Route path="/" element={<Navigate to="/timeline" replace />} />
           </Routes>
         </main>
