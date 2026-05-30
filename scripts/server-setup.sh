@@ -15,7 +15,7 @@ echo "✅ 创建目录 /var/www/medical"
 # 2. 创建 Nginx 配置文件
 cat > /etc/nginx/sites-available/medical << 'EOF'
 server {
-    listen 8080;
+    listen 8050;
     server_name _;
 
     root /var/www/medical;
@@ -37,7 +37,7 @@ server {
     gzip_types text/plain text/css application/javascript application/json;
 }
 EOF
-echo "✅ Nginx 配置已创建"
+echo "✅ Nginx 配置已创建（端口 8050）"
 
 # 3. 启用配置
 ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
@@ -48,12 +48,12 @@ systemctl restart nginx
 systemctl enable nginx
 echo "✅ Nginx 重启完成"
 
-# 5. 防火墙放行 8080 端口（如果 ufw 已启用）
+# 5. 防火墙放行 8050 端口（如果 ufw 已启用）
 if command -v ufw &> /dev/null; then
-    ufw allow 8080/tcp || true
-    echo "✅ 防火墙已放行 8080 端口"
+    ufw allow 8050/tcp || true
+    echo "✅ 防火墙已放行 8050 端口"
 fi
 
 echo ""
 echo "🎉 服务器配置完成！"
-echo "📍 访问地址: http://$(curl -s ifconfig.me):8080"
+echo "📍 访问地址: http://$(curl -s ifconfig.me):8050"

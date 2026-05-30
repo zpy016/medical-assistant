@@ -18,4 +18,4 @@ git push origin main
 echo ""
 echo "✅ 已推送！GitHub Actions 将自动部署到服务器。"
 echo "⏱️ 约 1-2 分钟后生效。"
-echo "📍 访问地址: http://69.5.21.128:8080"
+echo "📍 访问地址: http://69.5.21.128:8050"
