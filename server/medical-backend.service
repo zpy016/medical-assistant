@@ -1,0 +1,16 @@
+[Unit]
+Description=Medical Assistant OCR Backend
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/medical-server
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/medical-server/.env
+
+[Install]
+WantedBy=multi-user.target

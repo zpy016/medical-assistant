@@ -3,12 +3,7 @@ name: 🚀 Deploy Medical Assistant
 on:
   push:
     branches: [main, master]
-  workflow_dispatch: # 支持手动触发
-
-env:
-  VITE_VOLC_AK: ${{ secrets.VOLC_AK }}
-  VITE_VOLC_SK: ${{ secrets.VOLC_SK }}
-  VITE_VOLC_REGION: cn-north-1
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
@@ -25,16 +20,15 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      # 3. 安装依赖
-      - name: 📦 Install dependencies
+      # 3. 安装前端依赖并构建
+      - name: 📦 Install frontend dependencies
         run: npm ci
 
-      # 4. 构建
-      - name: 🔨 Build project
+      - name: 🔨 Build frontend
         run: npm run build
 
-      # 5. 通过 SSH 上传 dist 目录到服务器
-      - name: 🚀 Deploy to server
+      # 4. 部署前端 dist 到服务器
+      - name: 🚀 Deploy frontend
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -45,12 +39,89 @@ jobs:
           strip_components: 1
           rm: true
 
-      # 6. 重启 Nginx
-      - name: 🔄 Restart Nginx
+      # 5. 部署后端代码到服务器
+      - name: 🚀 Deploy backend
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "server/*"
+          target: "/opt/medical-server"
+          strip_components: 1
+          rm: true
+
+      # 6. 配置并启动后端 + 更新 Nginx
+      - name: 🔄 Configure and restart services
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
+            # ─── 创建后端 .env 文件 ───
+            echo "VOLC_AK=${{ secrets.VOLC_AK }}" > /opt/medical-server/.env
+            echo "VOLC_SK=${{ secrets.VOLC_SK }}" >> /opt/medical-server/.env
+            echo "VOLC_REGION=cn-north-1" >> /opt/medical-server/.env
+            echo "PORT=3001" >> /opt/medical-server/.env
+
+            # ─── 安装后端依赖 ───
+            cd /opt/medical-server && npm install --production
+
+            # ─── 确保 systemd service 存在 ───
+            if [ ! -f /etc/systemd/system/medical-backend.service ]; then
+              cp /opt/medical-server/medical-backend.service /etc/systemd/system/
+              systemctl daemon-reload
+              systemctl enable medical-backend
+            fi
+
+            # ─── 启动/重启后端 ───
+            systemctl restart medical-backend
+            systemctl status medical-backend --no-pager
+
+            # ─── 更新 Nginx 配置（含 /api/ 反向代理） ───
+            cat > /etc/nginx/sites-available/medical << 'NGINX_EOF'
+            server {
+                listen 8050;
+                server_name _;
+
+                # API 反向代理到后端
+                location /api/ {
+                    proxy_pass http://127.0.0.1:3001;
+                    proxy_http_version 1.1;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_read_timeout 60s;
+                    proxy_connect_timeout 60s;
+                    client_max_body_size 20M;
+                }
+
+                # 静态文件（React SPA）
+                location / {
+                    root /var/www/medical;
+                    index index.html;
+                    try_files $uri $uri/ /index.html;
+                }
+
+                # 静态资源缓存
+                location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+                    expires 1M;
+                    add_header Cache-Control "public, immutable";
+                }
+
+                gzip on;
+                gzip_types text/plain text/css application/javascript application/json;
+            }
+            NGINX_EOF
+
+            # 确保 sites-enabled 链接
+            ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
+
+            # 测试并重载 Nginx
             nginx -t && systemctl restart nginx
+
+            echo ""
+            echo "✅ Deployment complete!"
+            echo "📍 Frontend: http://${{ secrets.SERVER_IP }}:8050"
+            echo "🔧 Backend: http://127.0.0.1:3001"
