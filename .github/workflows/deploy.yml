@@ -27,65 +27,86 @@ jobs:
       - name: 🔨 Build frontend
         run: npm run build
 
-      # 4. 部署前端 dist 到服务器
+      # 4. 打包前端为 tar.gz（确保目录结构完整）
+      - name: 📦 Archive frontend
+        run: tar -czf frontend.tar.gz -C dist .
+
+      # 5. 打包后端为 tar.gz
+      - name: 📦 Archive backend
+        run: tar -czf backend.tar.gz -C server .
+
+      # 6. 上传前端 tar 包并解压部署
       - name: 🚀 Deploy frontend
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
-          source: "dist/"
+          source: "frontend.tar.gz"
           target: "/var/www/medical"
-          strip_components: 1
-          rm: true
 
-      # 5. 部署后端代码到服务器
-      - name: 🚀 Deploy backend
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          source: "server/"
-          target: "/opt/medical-server"
-          strip_components: 1
-          rm: true
-
-      # 6. 配置并启动后端 + 更新 Nginx
-      - name: 🔄 Configure and restart services
+      - name: 🚀 Extract frontend
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            # ─── 创建后端 .env 文件 ───
-            echo "VOLC_AK=${{ secrets.VOLC_AK }}" > /opt/medical-server/.env
-            echo "VOLC_SK=${{ secrets.VOLC_SK }}" >> /opt/medical-server/.env
-            echo "VOLC_REGION=cn-north-1" >> /opt/medical-server/.env
-            echo "PORT=3001" >> /opt/medical-server/.env
+            cd /var/www/medical
+            rm -rf *
+            tar -xzf frontend.tar.gz
+            rm frontend.tar.gz
+            ls -la
+            ls -la assets/
 
-            # ─── 安装后端依赖 ───
-            cd /opt/medical-server && npm install --production
+      # 7. 上传后端 tar 包并解压部署
+      - name: 🚀 Deploy backend
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          source: "backend.tar.gz"
+          target: "/opt/medical-server"
 
-            # ─── 确保 systemd service 存在 ───
+      - name: 🚀 Extract backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            cd /opt/medical-server
+            rm -rf *.js *.json *.service .env node_modules
+            tar -xzf backend.tar.gz
+            rm backend.tar.gz
+
+            # 创建 .env 文件
+            echo "VOLC_AK=${{ secrets.VOLC_AK }}" > .env
+            echo "VOLC_SK=${{ secrets.VOLC_SK }}" >> .env
+            echo "VOLC_REGION=cn-north-1" >> .env
+            echo "PORT=3001" >> .env
+
+            # 安装依赖
+            npm install --production
+
+            # 确保 systemd service 存在
             if [ ! -f /etc/systemd/system/medical-backend.service ]; then
-              cp /opt/medical-server/medical-backend.service /etc/systemd/system/
+              cp medical-backend.service /etc/systemd/system/
               systemctl daemon-reload
               systemctl enable medical-backend
             fi
 
-            # ─── 启动/重启后端 ───
+            # 启动/重启后端
             systemctl restart medical-backend
             systemctl status medical-backend --no-pager
 
-            # ─── 更新 Nginx 配置（含 /api/ 反向代理） ───
+            # 更新 Nginx 配置
             cat > /etc/nginx/sites-available/medical << 'NGINX_EOF'
             server {
                 listen 8050;
                 server_name _;
 
-                # API 反向代理到后端
                 location /api/ {
                     proxy_pass http://127.0.0.1:3001;
                     proxy_http_version 1.1;
@@ -97,14 +118,12 @@ jobs:
                     client_max_body_size 20M;
                 }
 
-                # 静态文件（React SPA）
                 location / {
                     root /var/www/medical;
                     index index.html;
                     try_files $uri $uri/ /index.html;
                 }
 
-                # 静态资源缓存
                 location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
                     expires 1M;
                     add_header Cache-Control "public, immutable";
@@ -115,13 +134,9 @@ jobs:
             }
             NGINX_EOF
 
-            # 确保 sites-enabled 链接
             ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
-
-            # 测试并重载 Nginx
             nginx -t && systemctl restart nginx
 
             echo ""
             echo "✅ Deployment complete!"
             echo "📍 Frontend: http://${{ secrets.SERVER_IP }}:8050"
-            echo "🔧 Backend: http://127.0.0.1:3001"
