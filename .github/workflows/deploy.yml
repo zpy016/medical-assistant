@@ -9,100 +9,73 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. 检出代码
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # 2. 设置 Node.js
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      # 3. 安装前端依赖并构建
-      - name: 📦 Install frontend dependencies
-        run: npm ci
+      - name: 📦 Install dependencies & build
+        run: |
+          npm ci
+          npm run build
 
-      - name: 🔨 Build frontend
-        run: npm run build
+      - name: 📦 Install sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      # 4. 打包前端为 tar.gz（确保目录结构完整）
-      - name: 📦 Archive frontend
-        run: tar -czf frontend.tar.gz -C dist .
-
-      # 5. 打包后端为 tar.gz
-      - name: 📦 Archive backend
-        run: tar -czf backend.tar.gz -C server .
-
-      # 6. 上传前端 tar 包并解压部署
+      # ─── 部署前端 ───
       - name: 🚀 Deploy frontend
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          source: "frontend.tar.gz"
-          target: "/var/www/medical"
+        run: |
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
+            scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -r dist/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/var/www/medical/
 
-      - name: 🚀 Extract frontend
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script: |
-            cd /var/www/medical
-            rm -rf *
-            tar -xzf frontend.tar.gz
-            rm frontend.tar.gz
-            ls -la
-            ls -la assets/
-
-      # 7. 上传后端 tar 包并解压部署
+      # ─── 部署后端 ───
       - name: 🚀 Deploy backend
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          source: "backend.tar.gz"
-          target: "/opt/medical-server"
+        run: |
+          sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
+            scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -r server/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/opt/medical-server/
 
-      - name: 🚀 Extract backend
+      # ─── 服务器端配置 ───
+      - name: 🔄 Configure server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
+            # ── 前端权限 ──
+            mkdir -p /var/www/medical
+            chown -R www-data:www-data /var/www/medical
+            chmod -R 755 /var/www/medical
+            echo "📁 Frontend files:"
+            ls -la /var/www/medical/
+            ls -la /var/www/medical/assets/ || echo "⚠️ assets dir missing!"
+
+            # ── 后端配置 ──
             cd /opt/medical-server
-            rm -rf *.js *.json *.service .env node_modules
-            tar -xzf backend.tar.gz
-            rm backend.tar.gz
-
-            # 创建 .env 文件
-            echo "VOLC_AK=${{ secrets.VOLC_AK }}" > .env
-            echo "VOLC_SK=${{ secrets.VOLC_SK }}" >> .env
-            echo "VOLC_REGION=cn-north-1" >> .env
-            echo "PORT=3001" >> .env
-
-            # 安装依赖
+            cat > .env << 'EOF'
+            VOLC_AK=${{ secrets.VOLC_AK }}
+            VOLC_SK=${{ secrets.VOLC_SK }}
+            VOLC_REGION=cn-north-1
+            PORT=3001
+            EOF
             npm install --production
 
-            # 确保 systemd service 存在
+            # systemd service
             if [ ! -f /etc/systemd/system/medical-backend.service ]; then
               cp medical-backend.service /etc/systemd/system/
               systemctl daemon-reload
               systemctl enable medical-backend
             fi
-
-            # 启动/重启后端
             systemctl restart medical-backend
-            systemctl status medical-backend --no-pager
 
-            # 更新 Nginx 配置
-            cat > /etc/nginx/sites-available/medical << 'NGINX_EOF'
+            # ── Nginx 配置 ──
+            cat > /etc/nginx/sites-available/medical << 'EOF'
             server {
                 listen 8050;
                 server_name _;
@@ -132,11 +105,17 @@ jobs:
                 gzip on;
                 gzip_types text/plain text/css application/javascript application/json;
             }
-            NGINX_EOF
+            EOF
 
             ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
-            nginx -t && systemctl restart nginx
+            rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
+            # SELinux 修复（如果有）
+            if command -v getenforce &>/dev/null && [ "$(getenforce)" = "Enforcing" ]; then
+              setenforce 0 2>/dev/null || true
+              chcon -Rt httpd_sys_content_t /var/www/medical 2>/dev/null || true
+            fi
+
+            nginx -t && systemctl restart nginx
             echo ""
             echo "✅ Deployment complete!"
-            echo "📍 Frontend: http://${{ secrets.SERVER_IP }}:8050"
