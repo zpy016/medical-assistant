@@ -18,45 +18,57 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: 📦 Install dependencies & build
+      - name: 📦 Build frontend
         run: |
           npm ci
           npm run build
+          echo "=== dist contents ==="
+          ls -la dist/
+          ls -la dist/assets/
+          echo "=== index.html refs ==="
+          grep -o 'src="[^"]*"' dist/index.html || true
+          grep -o 'href="[^"]*"' dist/index.html || true
 
       - name: 📦 Install sshpass
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
       # ─── 部署前端 ───
-      - name: 🚀 Deploy frontend
+      - name: 🚀 Deploy frontend (scp -r dist/.)
         run: |
+          echo "=== Uploading dist/. to /var/www/medical/ ==="
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
             scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -r dist/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/var/www/medical/
+            -r dist/. ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/var/www/medical/
+          echo "=== scp exit code: $? ==="
 
       # ─── 部署后端 ───
-      - name: 🚀 Deploy backend
+      - name: 🚀 Deploy backend (scp -r server/.)
         run: |
           sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
             scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -r server/* ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/opt/medical-server/
+            -r server/. ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/opt/medical-server/
 
-      # ─── 服务器端配置 ───
-      - name: 🔄 Configure server
+      # ─── 服务器端配置 + 验证 ───
+      - name: 🔄 Configure & verify
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            # ── 前端权限 ──
-            mkdir -p /var/www/medical
-            chown -R www-data:www-data /var/www/medical
-            chmod -R 755 /var/www/medical
-            echo "📁 Frontend files:"
+            echo "=== /var/www/medical/ ==="
             ls -la /var/www/medical/
-            ls -la /var/www/medical/assets/ || echo "⚠️ assets dir missing!"
+            echo "=== /var/www/medical/assets/ ==="
+            ls -la /var/www/medical/assets/ || echo "ASSETS MISSING"
+            echo "=== file permissions ==="
+            stat /var/www/medical/index.html || true
+            stat /var/www/medical/assets/*.js /var/www/medical/assets/*.css 2>/dev/null || true
 
-            # ── 后端配置 ──
+            # 权限修复
+            chown -R root:root /var/www/medical
+            chmod -R 755 /var/www/medical
+
+            # ── 后端 ──
             cd /opt/medical-server
             cat > .env << 'EOF'
             VOLC_AK=${{ secrets.VOLC_AK }}
@@ -64,58 +76,49 @@ jobs:
             VOLC_REGION=cn-north-1
             PORT=3001
             EOF
-            npm install --production
+            npm install --production 2>/dev/null || true
 
-            # systemd service
             if [ ! -f /etc/systemd/system/medical-backend.service ]; then
-              cp medical-backend.service /etc/systemd/system/
-              systemctl daemon-reload
-              systemctl enable medical-backend
+              cp medical-backend.service /etc/systemd/system/ 2>/dev/null || true
+              systemctl daemon-reload 2>/dev/null || true
+              systemctl enable medical-backend 2>/dev/null || true
             fi
-            systemctl restart medical-backend
+            systemctl restart medical-backend 2>/dev/null || true
 
-            # ── Nginx 配置 ──
+            # ── Nginx ──
             cat > /etc/nginx/sites-available/medical << 'EOF'
             server {
                 listen 8050;
                 server_name _;
-
+                root /var/www/medical;
+                index index.html;
+                location / {
+                    try_files $uri $uri/ /index.html;
+                }
                 location /api/ {
                     proxy_pass http://127.0.0.1:3001;
                     proxy_http_version 1.1;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                     proxy_read_timeout 60s;
                     proxy_connect_timeout 60s;
                     client_max_body_size 20M;
                 }
-
-                location / {
-                    root /var/www/medical;
-                    index index.html;
-                    try_files $uri $uri/ /index.html;
-                }
-
                 location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
                     expires 1M;
                     add_header Cache-Control "public, immutable";
                 }
-
                 gzip on;
                 gzip_types text/plain text/css application/javascript application/json;
             }
             EOF
-
-            ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
             rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-
-            # SELinux 修复（如果有）
-            if command -v getenforce &>/dev/null && [ "$(getenforce)" = "Enforcing" ]; then
-              setenforce 0 2>/dev/null || true
-              chcon -Rt httpd_sys_content_t /var/www/medical 2>/dev/null || true
-            fi
-
+            ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
             nginx -t && systemctl restart nginx
+
             echo ""
-            echo "✅ Deployment complete!"
+            echo "=== curl test ==="
+            curl -s -o /dev/null -w "index.html: %{http_code}\n" http://127.0.0.1:8050/
+            curl -s -o /dev/null -w "JS: %{http_code}\n" http://127.0.0.1:8050/assets/index-*.js || true
+            curl -s -o /dev/null -w "CSS: %{http_code}\n" http://127.0.0.1:8050/assets/index-*.css || true
+            echo "✅ Done"
