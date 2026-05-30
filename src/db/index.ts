@@ -112,6 +112,29 @@ export async function updateVisitEvent(id: string, changes: Partial<VisitEvent>)
   await db.visitEvents.update(id, changes);
 }
 
+// ==================== Family Members ====================
+
+export async function getFamilyMembers(userId: string): Promise<FamilyMember[]> {
+  return db.familyMembers.where('userId').equals(userId).toArray();
+}
+
+export async function addFamilyMember(member: Omit<FamilyMember, 'invitedAt'>): Promise<string> {
+  const newMember: FamilyMember = {
+    ...member,
+    invitedAt: Date.now(),
+  };
+  await db.familyMembers.put(newMember);
+  return newMember.id;
+}
+
+export async function updateFamilyMember(id: string, changes: Partial<FamilyMember>): Promise<void> {
+  await db.familyMembers.update(id, changes);
+}
+
+export async function removeFamilyMember(id: string): Promise<void> {
+  await db.familyMembers.delete(id);
+}
+
 // ==================== Settings ====================
 
 export async function getSettings(): Promise<AppSettings | undefined> {

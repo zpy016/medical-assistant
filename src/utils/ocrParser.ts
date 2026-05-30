@@ -8,6 +8,7 @@
 
 import type { DocumentType, StructuredData, OCRResult, TestItem, Medication } from '../types';
 import { parseDateFromText } from './helpers';
+import { extractICD10Codes } from './icd10';
 
 // ==================== 文档类型自动识别 ====================
 
@@ -110,6 +111,12 @@ export function extractStructuredData(ocrResult: OCRResult): StructuredData {
   // 提取诊断
   data.diagnosis = extractDiagnosis(text);
 
+  // 提取 ICD-10 编码
+  if (data.diagnosis && data.diagnosis.length > 0) {
+    const icdResult = extractICD10Codes(data.diagnosis);
+    data.icd10Codes = icdResult.codes;
+  }
+
   // 提取过敏史
   data.allergies = extractField(text, [
     /药物过敏史[：:]\s*([^\n]{2,50})/,
@@ -121,6 +128,9 @@ export function extractStructuredData(ocrResult: OCRResult): StructuredData {
     /备注[：:]\s*([^\n]{2,200})/,
     /医嘱[：:]\s*([^\n]{2,200})/,
   ]);
+
+  // 提取就诊类型
+  data.visitType = detectVisitType(text);
 
   // 根据文档类型提取特定字段
   const docType = ocrResult.documentType ?? detectDocumentType(text);
@@ -327,6 +337,15 @@ function extractMedications(text: string): Medication[] | undefined {
   }
 
   return medications.length > 0 ? medications : undefined;
+}
+
+// ==================== 就诊类型检测 ====================
+
+function detectVisitType(text: string): import('../types').VisitType {
+  if (/急诊/.test(text)) return 'emergency';
+  if (/住院|入院|出院小结|住院收费/.test(text)) return 'inpatient';
+  if (/体检|健康体检|入职体检|年度体检/.test(text)) return 'physical';
+  return 'outpatient';
 }
 
 // ==================== 金额提取 ====================

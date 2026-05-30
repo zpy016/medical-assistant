@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 import type {
   Patient, MedicalRecord, VisitEvent, FilterOptions,
-  UploadTask, DocumentType, RecordStatus, StructuredData, OCRResult,
+  UploadTask, DocumentType, RecordStatus, StructuredData, OCRResult, FamilyMember,
 } from '../types';
 import * as db from '../db';
 import { parseDateFromText, generateId, groupRecordsByVisit } from '../utils/helpers';
@@ -21,6 +21,7 @@ interface RecordState {
   currentPatientId: string | null;
   records: MedicalRecord[];
   visitEvents: VisitEvent[];
+  familyMembers: FamilyMember[];
   uploadTasks: UploadTask[];
 
   // UI状态
@@ -33,8 +34,14 @@ interface RecordState {
   loadPatients: () => Promise<void>;
   loadRecords: (patientId?: string) => Promise<void>;
   loadVisitEvents: (patientId?: string) => Promise<void>;
+  loadFamilyMembers: () => Promise<void>;
   setCurrentPatient: (id: string) => Promise<void>;
   addPatient: (patient: Omit<Patient, 'createdAt' | 'updatedAt'>) => Promise<void>;
+
+  // 家人共享
+  addFamilyMember: (member: Omit<FamilyMember, 'invitedAt'>) => Promise<void>;
+  removeFamilyMember: (id: string) => Promise<void>;
+  updateFamilyMemberPermission: (id: string, permission: FamilyMember['permission']) => Promise<void>;
 
   // 上传与OCR
   addUploadTask: (file: File) => string;
@@ -65,6 +72,7 @@ export const useRecordStore = create<RecordState>((set, get) => ({
   currentPatientId: null,
   records: [],
   visitEvents: [],
+  familyMembers: [],
   uploadTasks: [],
   isLoading: false,
   selectedRecordId: null,
@@ -97,6 +105,12 @@ export const useRecordStore = create<RecordState>((set, get) => ({
     set({ visitEvents });
   },
 
+  loadFamilyMembers: async () => {
+    const currentUserId = get().currentPatientId ?? 'default';
+    const familyMembers = await db.getFamilyMembers(currentUserId);
+    set({ familyMembers });
+  },
+
   setCurrentPatient: async (id) => {
     set({ currentPatientId: id });
     await db.setDefaultPatient(id);
@@ -108,6 +122,23 @@ export const useRecordStore = create<RecordState>((set, get) => ({
     const id = await db.addPatient(patient);
     await get().loadPatients();
     await get().setCurrentPatient(id);
+  },
+
+  // ---- 家人共享 ----
+
+  addFamilyMember: async (member) => {
+    await db.addFamilyMember(member);
+    await get().loadFamilyMembers();
+  },
+
+  removeFamilyMember: async (id) => {
+    await db.removeFamilyMember(id);
+    await get().loadFamilyMembers();
+  },
+
+  updateFamilyMemberPermission: async (id, permission) => {
+    await db.updateFamilyMember(id, { permission });
+    await get().loadFamilyMembers();
   },
 
   // ---- 上传与OCR ----

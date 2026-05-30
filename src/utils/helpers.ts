@@ -8,6 +8,7 @@
 import { format, parseISO, isValid } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import type { MedicalRecord, VisitEvent, DocumentType, VisitType } from '../types';
+import { getICD10Name, getICD10Category } from './icd10';
 
 // ==================== ID生成 ====================
 
@@ -230,6 +231,63 @@ export function convertToCSV(records: MedicalRecord[]): string {
     r.status === 'confirmed' ? '已确认' : r.status === 'corrected' ? '已修正' : '待确认',
   ]);
   return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+}
+
+// ==================== 病种聚类（ICD-10关联）====================
+
+/**
+ * 按 ICD-10 编码跨医院聚合同病种病历
+ * 返回：按 ICD-10 编码分组的记录列表
+ */
+export function groupRecordsByDisease(records: MedicalRecord[]): Array<{
+  icd10Code: string;
+  diseaseName: string;
+  category: string;
+  records: MedicalRecord[];
+  hospitals: string[];
+  dateRange: { earliest: string; latest: string };
+}> {
+  const groups = new Map<string, MedicalRecord[]>();
+
+  for (const record of records) {
+    const codes = record.structuredData?.icd10Codes ?? [];
+    for (const code of codes) {
+      if (!groups.has(code)) {
+        groups.set(code, []);
+      }
+      const existing = groups.get(code)!;
+      if (!existing.find(r => r.id === record.id)) {
+        existing.push(record);
+      }
+    }
+  }
+
+  return Array.from(groups.entries())
+    .filter(([_, recs]) => recs.length >= 1)
+    .map(([code, recs]) => {
+      const hospitals = [...new Set(recs.map(r => r.structuredData?.hospital).filter((h): h is string => !!h))];
+      const dates = recs
+        .map(r => r.structuredData?.visitDate)
+        .filter((d): d is string => !!d)
+        .sort();
+
+      return {
+        icd10Code: code,
+        diseaseName: getICD10Name(code) ?? '未知疾病',
+        category: getICD10Category(code) ?? '其他',
+        records: recs.sort((a, b) => {
+          const da = a.structuredData?.visitDate ?? '';
+          const db = b.structuredData?.visitDate ?? '';
+          return db.localeCompare(da);
+        }),
+        hospitals,
+        dateRange: {
+          earliest: dates[0] ?? '',
+          latest: dates[dates.length - 1] ?? '',
+        },
+      };
+    })
+    .sort((a, b) => b.records.length - a.records.length);
 }
 
 // ==================== 防抖节流 ====================

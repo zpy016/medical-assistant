@@ -34,7 +34,7 @@ export default function UploadPage() {
 
         // OCR识别
         updateTaskStatus(taskId, 'processing', 50);
-        const ocrResult = await performOCR(compressedFile, { useMock: true });
+        const ocrResult = await performOCR(compressedFile);
 
         updateTaskStatus(taskId, 'processing', 90);
         setTaskOCRResult(taskId, ocrResult);

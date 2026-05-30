@@ -16,7 +16,9 @@ import RecordsPage from './pages/RecordsPage';
 import ProfilePage from './pages/ProfilePage';
 import RecordDetailPage from './pages/RecordDetailPage';
 import OCRConfirmPage from './pages/OCRConfirmPage';
+import LoginPage from './pages/LoginPage';
 import { initDemoData } from './utils/demoData';
+import { isLoggedIn } from './services/syncService';
 
 function App() {
   const location = useLocation();
@@ -46,7 +48,7 @@ function App() {
   }, [location]);
 
   // 隐藏底部导航的页面
-  const hideNavPaths = ['/ocr-confirm', '/record/'];
+  const hideNavPaths = ['/ocr-confirm', '/record/', '/login'];
   const showNav = !hideNavPaths.some(path => location.pathname.startsWith(path));
 
   return (
@@ -62,6 +64,7 @@ function App() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/record/:id" element={<RecordDetailPage />} />
             <Route path="/ocr-confirm/:taskId" element={<OCRConfirmPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<Navigate to="/timeline" replace />} />
           </Routes>
         </main>

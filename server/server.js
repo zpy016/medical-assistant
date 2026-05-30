@@ -83,6 +83,10 @@ async function callVolcengineOCR(imageBase64) {
   return response.json();
 }
 
+// 引入路由
+const authRoutes = require('./routes/auth');
+const syncRoutes = require('./routes/sync');
+
 // ==================== API Routes ====================
 
 /**
@@ -131,6 +135,10 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
     });
   }
 });
+
+// 认证与同步路由
+app.use('/api/auth', authRoutes);
+app.use('/api/sync', syncRoutes);
 
 // ==================== Error Handling ====================
 

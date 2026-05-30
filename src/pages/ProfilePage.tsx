@@ -3,22 +3,54 @@
  * 包含：患者管理、数据导出、OCR设置、关于
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecordStore } from '../stores/recordStore';
 import { exportAllData, clearAllData } from '../db';
+import { isLoggedIn, getCurrentUser, clearAuthToken, autoSync, syncDownload } from '../services/syncService';
 import { downloadJSON, convertToCSV } from '../utils/helpers';
 import {
   Users, Download, Trash2, Settings, Shield,
   ChevronRight, FileJson, FileSpreadsheet, AlertTriangle,
-  Plus, X, Check
+  Plus, X, Check, UserPlus, Eye, Pencil, UserCog,
+  Cloud, CloudOff, LogOut, LogIn, RefreshCw
 } from 'lucide-react';
+
+const RELATION_OPTIONS = [
+  { value: 'father', label: '父亲' },
+  { value: 'mother', label: '母亲' },
+  { value: 'spouse', label: '配偶' },
+  { value: 'son', label: '儿子' },
+  { value: 'daughter', label: '女儿' },
+  { value: 'other', label: '其他' },
+];
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { patients, currentPatientId, setCurrentPatient, addPatient } = useRecordStore();
+  const {
+    patients, currentPatientId, setCurrentPatient, addPatient,
+    familyMembers, loadFamilyMembers, addFamilyMember, removeFamilyMember, updateFamilyMemberPermission,
+    loadPatients, loadRecords, loadVisitEvents,
+  } = useRecordStore();
+
   const [showAddPatient, setShowAddPatient] = useState(false);
   const [newPatientName, setNewPatientName] = useState('');
+
+  // 家庭成员表单
+  const [showAddFamily, setShowAddFamily] = useState(false);
+  const [newFamilyName, setNewFamilyName] = useState('');
+  const [newFamilyRelation, setNewFamilyRelation] = useState('father');
+  const [newFamilyPermission, setNewFamilyPermission] = useState<'view' | 'edit'>('view');
+
+  // 登录/同步状态
+  const [loggedIn, setLoggedIn] = useState(isLoggedIn());
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+
+  // 加载家庭成员
+  useEffect(() => {
+    loadFamilyMembers();
+  }, [loadFamilyMembers]);
 
   const handleExport = async (format: 'json' | 'csv') => {
     const data = await exportAllData();
@@ -53,6 +85,61 @@ export default function ProfilePage() {
     });
     setNewPatientName('');
     setShowAddPatient(false);
+  };
+
+  const handleAddFamilyMember = async () => {
+    if (!newFamilyName.trim()) return;
+    await addFamilyMember({
+      id: crypto.randomUUID(),
+      userId: currentPatientId ?? 'default',
+      patientId: currentPatientId ?? 'default',
+      relation: newFamilyRelation,
+      permission: newFamilyPermission,
+    });
+    setNewFamilyName('');
+    setShowAddFamily(false);
+  };
+
+  const handleSync = async () => {
+    if (!loggedIn) {
+      navigate('/login');
+      return;
+    }
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const result = await autoSync();
+      setSyncMessage(result.message);
+    } catch (error) {
+      setSyncMessage('同步失败');
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMessage(''), 3000);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!loggedIn) return;
+    if (!confirm('⚠️ 这将用云端数据覆盖本地数据，确定要继续吗？')) return;
+    setSyncing(true);
+    try {
+      await syncDownload();
+      await loadPatients();
+      await loadRecords();
+      await loadVisitEvents();
+      setSyncMessage('云端数据已恢复到本地');
+    } catch (error) {
+      setSyncMessage('恢复失败');
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMessage(''), 3000);
+    }
+  };
+
+  const handleLogout = () => {
+    clearAuthToken();
+    setLoggedIn(false);
+    window.location.reload();
   };
 
   return (
@@ -138,6 +225,187 @@ export default function ProfilePage() {
               添加患者
             </button>
           )}
+        </div>
+      </div>
+
+      {/* 家庭成员管理 */}
+      <div className="px-4 mb-6">
+        <div className="bg-white rounded-xl border border-[var(--color-border)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--color-border)]/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <UserCog className="w-4 h-4 text-[var(--color-primary)]" />
+              <span className="text-sm font-semibold">家庭成员</span>
+            </div>
+            <span className="text-xs text-[var(--color-text-muted)]">{familyMembers.length}人</span>
+          </div>
+
+          {familyMembers.map(member => (
+            <div
+              key={member.id}
+              className="flex items-center justify-between px-4 py-3 hover:bg-[var(--color-bg)]/50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-[var(--color-bg)] flex items-center justify-center text-sm text-[var(--color-text-secondary)]">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">
+                    {RELATION_OPTIONS.find(r => r.value === member.relation)?.label ?? member.relation}
+                  </p>
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    权限：{member.permission === 'edit' ? '可编辑' : '仅查看'}
+                    {member.acceptedAt ? ' · 已接受' : ' · 待接受'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => updateFamilyMemberPermission(member.id, member.permission === 'view' ? 'edit' : 'view')}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    member.permission === 'edit'
+                      ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
+                      : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
+                  }`}
+                  title={member.permission === 'edit' ? '切换为仅查看' : '切换为可编辑'}
+                >
+                  {member.permission === 'edit' ? <Pencil className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={() => removeFamilyMember(member.id)}
+                  className="p-1.5 hover:bg-red-50 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] rounded-lg"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* 添加家庭成员 */}
+          {showAddFamily ? (
+            <div className="px-4 py-3 space-y-3 border-t border-[var(--color-border)]/50">
+              <input
+                autoFocus
+                type="text"
+                placeholder="家庭成员姓名"
+                value={newFamilyName}
+                onChange={(e) => setNewFamilyName(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)]"
+              />
+              <div className="flex gap-2">
+                <select
+                  value={newFamilyRelation}
+                  onChange={(e) => setNewFamilyRelation(e.target.value)}
+                  className="flex-1 px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)] bg-white"
+                >
+                  {RELATION_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={newFamilyPermission}
+                  onChange={(e) => setNewFamilyPermission(e.target.value as 'view' | 'edit')}
+                  className="flex-1 px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)] bg-white"
+                >
+                  <option value="view">仅查看</option>
+                  <option value="edit">可编辑</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleAddFamilyMember}
+                  className="flex-1 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium"
+                >
+                  添加
+                </button>
+                <button
+                  onClick={() => { setShowAddFamily(false); setNewFamilyName(''); }}
+                  className="flex-1 py-2 bg-[var(--color-bg)] text-[var(--color-text-secondary)] rounded-lg text-sm"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddFamily(true)}
+              className="w-full flex items-center gap-2 px-4 py-3 text-[var(--color-primary)] text-sm hover:bg-[var(--color-bg)]/50"
+            >
+              <UserPlus className="w-4 h-4" />
+              添加家庭成员
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 云同步 */}
+      <div className="px-4 mb-6">
+        <div className="bg-white rounded-xl border border-[var(--color-border)] overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--color-border)]/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {loggedIn ? (
+                <Cloud className="w-4 h-4 text-[var(--color-primary)]" />
+              ) : (
+                <CloudOff className="w-4 h-4 text-[var(--color-text-muted)]" />
+              )}
+              <span className="text-sm font-semibold">云同步</span>
+            </div>
+            {loggedIn && (
+              <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-600 rounded-full">
+                已登录
+              </span>
+            )}
+          </div>
+
+          <div className="px-4 py-3">
+            {loggedIn ? (
+              <div className="space-y-2">
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  当前用户：{getCurrentUser()?.phone}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-lg text-xs font-medium disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                    {syncing ? '同步中...' : '同步到云端'}
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    disabled={syncing}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[var(--color-bg)] text-[var(--color-text-secondary)] rounded-lg text-xs font-medium disabled:opacity-50"
+                  >
+                    <Cloud className="w-3.5 h-3.5" />
+                    从云端恢复
+                  </button>
+                </div>
+                {syncMessage && (
+                  <p className="text-[10px] text-center text-[var(--color-primary)]">{syncMessage}</p>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-[var(--color-danger)] text-xs"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  退出登录
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  登录后可同步数据到云端，换设备不丢失
+                </p>
+                <button
+                  onClick={() => navigate('/login')}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-[var(--color-primary)] text-white rounded-lg text-xs font-medium"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  登录 / 注册
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
