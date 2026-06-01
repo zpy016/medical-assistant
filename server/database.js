@@ -30,10 +30,16 @@ function initDatabase() {
       phone TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       name TEXT,
+      status TEXT DEFAULT 'active',
+      role TEXT DEFAULT 'user',
+      last_active_at INTEGER,
+      deleted_at INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+    CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+    CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
   `);
 
   // 患者表
@@ -103,19 +109,23 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_visit_events_patient ON visit_events(patient_id);
   `);
 
-  // 家庭成员表
+  // 家庭成员表（跨用户共享）
   db.exec(`
     CREATE TABLE IF NOT EXISTS family_members (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
+      invited_user_id TEXT,
       patient_id TEXT NOT NULL,
       relation TEXT NOT NULL,
       permission TEXT DEFAULT 'view',
+      status TEXT DEFAULT 'pending',
       invited_at INTEGER NOT NULL,
       accepted_at INTEGER,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (invited_user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_family_members_user ON family_members(user_id);
+    CREATE INDEX IF NOT EXISTS idx_family_members_invited ON family_members(invited_user_id);
   `);
 
   // 用药提醒表
@@ -203,10 +213,85 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_vaccines_patient ON vaccination_records(patient_id);
   `);
 
+  // 管理员操作日志表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admin_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_user_id TEXT NOT NULL,
+      details TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_logs_admin ON admin_logs(admin_id);
+    CREATE INDEX IF NOT EXISTS idx_admin_logs_target ON admin_logs(target_user_id);
+    CREATE INDEX IF NOT EXISTS idx_admin_logs_created ON admin_logs(created_at);
+  `);
+
+  // 用户活跃记录表（用于DAU/MAU统计）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      action TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_activity_date ON user_activity(date);
+    CREATE INDEX IF NOT EXISTS idx_user_activity_user ON user_activity(user_id);
+    CREATE INDEX IF NOT EXISTS idx_user_activity_user_date ON user_activity(user_id, date);
+  `);
+
   console.log('[DB] Database initialized at', DB_PATH);
 }
 
 initDatabase();
+
+// ==================== 数据库迁移：兼容已有数据 ====================
+
+function runMigrations() {
+  try {
+    // 为已有 users 表添加新字段
+    const columns = db.prepare("PRAGMA table_info(users)").all();
+    const colNames = columns.map(c => c.name);
+
+    if (!colNames.includes('status')) {
+      db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`);
+      console.log('[DB Migration] Added users.status');
+    }
+    if (!colNames.includes('role')) {
+      db.exec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`);
+      console.log('[DB Migration] Added users.role');
+    }
+    if (!colNames.includes('last_active_at')) {
+      db.exec(`ALTER TABLE users ADD COLUMN last_active_at INTEGER`);
+      console.log('[DB Migration] Added users.last_active_at');
+    }
+    if (!colNames.includes('deleted_at')) {
+      db.exec(`ALTER TABLE users ADD COLUMN deleted_at INTEGER`);
+      console.log('[DB Migration] Added users.deleted_at');
+    }
+
+    // 为已有 family_members 表添加新字段
+    const fmColumns = db.prepare("PRAGMA table_info(family_members)").all();
+    const fmColNames = fmColumns.map(c => c.name);
+
+    if (!fmColNames.includes('invited_user_id')) {
+      db.exec(`ALTER TABLE family_members ADD COLUMN invited_user_id TEXT REFERENCES users(id) ON DELETE CASCADE`);
+      console.log('[DB Migration] Added family_members.invited_user_id');
+    }
+    if (!fmColNames.includes('status')) {
+      db.exec(`ALTER TABLE family_members ADD COLUMN status TEXT DEFAULT 'accepted'`);
+      console.log('[DB Migration] Added family_members.status');
+    }
+
+    console.log('[DB] Migrations completed');
+  } catch (err) {
+    console.error('[DB Migration] Error:', err.message);
+  }
+}
+
+runMigrations();
 
 // ==================== 用户 CRUD ====================
 
@@ -228,6 +313,112 @@ function findUserByPhone(phone) {
 function findUserById(id) {
   const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
   return stmt.get(id) || null;
+}
+
+function updateUserLastActive(userId) {
+  const stmt = db.prepare('UPDATE users SET last_active_at = ? WHERE id = ?');
+  stmt.run(Date.now(), userId);
+}
+
+function updateUserStatus(userId, status) {
+  const stmt = db.prepare('UPDATE users SET status = ?, updated_at = ? WHERE id = ?');
+  stmt.run(status, Date.now(), userId);
+}
+
+function updateUserDeletedAt(userId, deletedAt) {
+  const stmt = db.prepare('UPDATE users SET deleted_at = ?, status = ?, updated_at = ? WHERE id = ?');
+  const status = deletedAt ? 'pending_deletion' : 'active';
+  stmt.run(deletedAt || null, status, Date.now(), userId);
+}
+
+function deleteUserAndData(userId) {
+  // 物理删除用户及其全部关联数据（外键CASCADE会自动处理）
+  const stmt = db.prepare('DELETE FROM users WHERE id = ?');
+  const result = stmt.run(userId);
+  return result.changes > 0;
+}
+
+function listUsers(options = {}) {
+  const { page = 1, pageSize = 20, search, status, role } = options;
+  const offset = (page - 1) * pageSize;
+  const conditions = ['1=1'];
+  const params = [];
+
+  if (search) {
+    conditions.push('(phone LIKE ? OR name LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  if (status) {
+    conditions.push('status = ?');
+    params.push(status);
+  }
+  if (role) {
+    conditions.push('role = ?');
+    params.push(role);
+  }
+
+  const where = conditions.join(' AND ');
+
+  const listStmt = db.prepare(`
+    SELECT id, phone, name, status, role, last_active_at, deleted_at, created_at, updated_at
+    FROM users WHERE ${where}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `);
+  const users = listStmt.all(...params, pageSize, offset);
+
+  const countStmt = db.prepare(`SELECT COUNT(*) as total FROM users WHERE ${where}`);
+  const { total } = countStmt.get(...params);
+
+  return { users, total, page, pageSize };
+}
+
+function getUserStats(userId) {
+  const patientCount = db.prepare('SELECT COUNT(*) as count FROM patients WHERE user_id = ?').get(userId).count;
+  const recordCount = db.prepare('SELECT COUNT(*) as count FROM records WHERE user_id = ?').get(userId).count;
+  const medicationCount = db.prepare('SELECT COUNT(*) as count FROM medications WHERE user_id = ?').get(userId).count;
+  const visitEventCount = db.prepare('SELECT COUNT(*) as count FROM visit_events WHERE user_id = ?').get(userId).count;
+  const familyMemberCount = db.prepare('SELECT COUNT(*) as count FROM family_members WHERE user_id = ?').get(userId).count;
+  const lastUpload = db.prepare('SELECT MAX(created_at) as last_upload FROM records WHERE user_id = ?').get(userId).last_upload;
+
+  return { patientCount, recordCount, medicationCount, visitEventCount, familyMemberCount, lastUpload };
+}
+
+function getSystemStats() {
+  const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+  const activeUsers = db.prepare("SELECT COUNT(*) as count FROM users WHERE status = 'active'").get().count;
+  const pendingDeletion = db.prepare("SELECT COUNT(*) as count FROM users WHERE status = 'pending_deletion'").get().count;
+  const totalRecords = db.prepare('SELECT COUNT(*) as count FROM records').get().count;
+  const totalPatients = db.prepare('SELECT COUNT(*) as count FROM patients').get().count;
+
+  // 今日数据
+  const today = new Date().toISOString().slice(0, 10);
+  const todayNewUsers = db.prepare('SELECT COUNT(*) as count FROM users WHERE date(created_at/1000, "unixepoch") = ?').get(today).count;
+  const todayActive = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM user_activity WHERE date = ?').get(today).count;
+
+  return { totalUsers, activeUsers, pendingDeletion, totalRecords, totalPatients, todayNewUsers, todayActive };
+}
+
+function getDailyStats(days = 30) {
+  const rows = db.prepare(`
+    SELECT date, COUNT(DISTINCT user_id) as dau
+    FROM user_activity
+    WHERE date >= date('now', '-${days} days')
+    GROUP BY date
+    ORDER BY date
+  `).all();
+  return rows;
+}
+
+function getMonthlyNewUsers(months = 6) {
+  const rows = db.prepare(`
+    SELECT strftime('%Y-%m', datetime(created_at/1000, 'unixepoch')) as month, COUNT(*) as count
+    FROM users
+    WHERE created_at >= strftime('%s', 'now', '-${months} months') * 1000
+    GROUP BY month
+    ORDER BY month
+  `).all();
+  return rows;
 }
 
 // ==================== 患者 CRUD ====================
@@ -343,10 +534,10 @@ function getVisitEventsByUser(userId) {
 
 function createFamilyMember(member) {
   const stmt = db.prepare(`
-    INSERT INTO family_members (id, user_id, patient_id, relation, permission, invited_at, accepted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO family_members (id, user_id, invited_user_id, patient_id, relation, permission, status, invited_at, accepted_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  stmt.run(member.id, member.userId, member.patientId, member.relation, member.permission, member.invitedAt, member.acceptedAt || null);
+  stmt.run(member.id, member.userId, member.invitedUserId || null, member.patientId, member.relation, member.permission || 'view', member.status || 'pending', member.invitedAt, member.acceptedAt || null);
   return member.id;
 }
 
@@ -355,16 +546,100 @@ function getFamilyMembersByUser(userId) {
   return stmt.all(userId).map(row => ({
     ...row,
     userId: row.user_id,
+    invitedUserId: row.invited_user_id,
     patientId: row.patient_id,
     invitedAt: row.invited_at,
     acceptedAt: row.accepted_at,
   }));
 }
 
+// 获取被邀请的家庭成员（跨用户共享）
+function getFamilyMembersByInvitedUser(invitedUserId) {
+  const stmt = db.prepare(`
+    SELECT fm.*, p.name as patient_name, p.gender as patient_gender, p.age as patient_age, u.name as owner_name
+    FROM family_members fm
+    JOIN patients p ON fm.patient_id = p.id
+    JOIN users u ON fm.user_id = u.id
+    WHERE fm.invited_user_id = ? AND fm.status = 'accepted'
+  `);
+  return stmt.all(invitedUserId).map(row => ({
+    ...row,
+    userId: row.user_id,
+    invitedUserId: row.invited_user_id,
+    patientId: row.patient_id,
+    invitedAt: row.invited_at,
+    acceptedAt: row.accepted_at,
+    patientName: row.patient_name,
+    patientGender: row.patient_gender,
+    patientAge: row.patient_age,
+    ownerName: row.owner_name,
+  }));
+}
+
+function updateFamilyMemberStatus(id, status, acceptedAt) {
+  const stmt = db.prepare('UPDATE family_members SET status = ?, accepted_at = ? WHERE id = ?');
+  const result = stmt.run(status, acceptedAt || null, id);
+  return result.changes > 0;
+}
+
 function deleteFamilyMember(id, userId) {
   const stmt = db.prepare('DELETE FROM family_members WHERE id = ? AND user_id = ?');
   const result = stmt.run(id, userId);
   return result.changes > 0;
+}
+
+// ==================== 管理员日志 CRUD ====================
+
+function createAdminLog(log) {
+  const stmt = db.prepare(`
+    INSERT INTO admin_logs (admin_id, action, target_user_id, details, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  stmt.run(log.adminId, log.action, log.targetUserId, log.details || null, Date.now());
+}
+
+function getAdminLogs(options = {}) {
+  const { page = 1, pageSize = 50, adminId, targetUserId } = options;
+  const offset = (page - 1) * pageSize;
+  const conditions = ['1=1'];
+  const params = [];
+
+  if (adminId) {
+    conditions.push('admin_id = ?');
+    params.push(adminId);
+  }
+  if (targetUserId) {
+    conditions.push('target_user_id = ?');
+    params.push(targetUserId);
+  }
+
+  const where = conditions.join(' AND ');
+  const stmt = db.prepare(`
+    SELECT * FROM admin_logs WHERE ${where}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `);
+  return stmt.all(...params, pageSize, offset);
+}
+
+// ==================== 用户活跃记录 CRUD ====================
+
+function recordUserActivity(userId, action) {
+  const date = new Date().toISOString().slice(0, 10);
+  const stmt = db.prepare(`
+    INSERT INTO user_activity (user_id, date, action, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.run(userId, date, action || 'login', Date.now());
+}
+
+function getUserActivityDates(userId, days = 30) {
+  const rows = db.prepare(`
+    SELECT DISTINCT date FROM user_activity
+    WHERE user_id = ? AND date >= date('now', '-${days} days')
+    ORDER BY date
+  `).all(userId);
+  return rows.map(r => r.date);
 }
 
 // ==================== 数据导出 ====================
@@ -386,19 +661,42 @@ function exportUserData(userId) {
 
 module.exports = {
   db,
+  // 用户
   createUser,
   findUserByPhone,
   findUserById,
+  updateUserLastActive,
+  updateUserStatus,
+  updateUserDeletedAt,
+  deleteUserAndData,
+  listUsers,
+  getUserStats,
+  getSystemStats,
+  getDailyStats,
+  getMonthlyNewUsers,
+  // 患者
   createPatient,
   getPatientsByUser,
   updatePatientDefault,
+  // 病历
   createRecord,
   getRecordsByUser,
   deleteRecord,
+  // 就诊事件
   createVisitEvent,
   getVisitEventsByUser,
+  // 家庭成员
   createFamilyMember,
   getFamilyMembersByUser,
+  getFamilyMembersByInvitedUser,
+  updateFamilyMemberStatus,
   deleteFamilyMember,
+  // 管理员日志
+  createAdminLog,
+  getAdminLogs,
+  // 用户活跃
+  recordUserActivity,
+  getUserActivityDates,
+  // 导出
   exportUserData,
 };

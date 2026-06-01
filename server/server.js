@@ -87,6 +87,8 @@ async function callVolcengineOCR(imageBase64) {
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
 const aiRoutes = require('./routes/ai');
+const adminRoutes = require('./routes/admin');
+const familyRoutes = require('./routes/family');
 
 // ==================== API Routes ====================
 
@@ -141,6 +143,8 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/family', familyRoutes);
 
 // ==================== Error Handling ====================
 

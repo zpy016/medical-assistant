@@ -3,6 +3,7 @@
  * App 主组件
  * 移动端优先设计，同时适配桌面端
  * 采用"底部导航 + 页面切换"的经典App架构
+ * 管理后台路由独立布局（全宽桌面端）
  * ============================================
  */
 
@@ -27,8 +28,11 @@ import VaccinesPage from './pages/VaccinesPage';
 import AIReportAnalysisPage from './pages/AIReportAnalysisPage';
 import AIVisitPrepPage from './pages/AIVisitPrepPage';
 import AICaseSummaryPage from './pages/AICaseSummaryPage';
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminUsersPage from './pages/AdminUsersPage';
+import AdminUserDetailPage from './pages/AdminUserDetailPage';
 import { initDemoData } from './utils/demoData';
-import { isLoggedIn } from './services/syncService';
 
 function App() {
   const location = useLocation();
@@ -57,42 +61,53 @@ function App() {
     useRecordStore.setState({ activeTab: tab as never });
   }, [location]);
 
+  const isAdminRoute = location.pathname.startsWith('/admin');
+
   // 隐藏底部导航的页面
   const hideNavPaths = ['/ocr-confirm', '/record/', '/login', '/ai/'];
-  const showNav = !hideNavPaths.some(path => location.pathname.startsWith(path));
+  const showNav = !isAdminRoute && !hideNavPaths.some(path => location.pathname.startsWith(path));
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] flex justify-center">
-      {/* 移动端容器 - 限制最大宽度 */}
-      <div className="w-full max-w-[430px] bg-[var(--color-surface)] min-h-screen shadow-2xl relative flex flex-col">
-        {/* 主内容区域 */}
-        <main className="flex-1 overflow-y-auto pb-20">
-          <Routes>
-            <Route path="/timeline" element={<TimelinePage />} />
-            <Route path="/records" element={<RecordsPage />} />
-            <Route path="/upload" element={<UploadPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/record/:id" element={<RecordDetailPage />} />
-            <Route path="/ocr-confirm/:taskId" element={<OCRConfirmPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/abnormal-tests" element={<AbnormalTestsPage />} />
-            <Route path="/abnormal-test/:recordId/:itemName" element={<AbnormalTestDetailPage />} />
-            <Route path="/medications" element={<MedicationsPage />} />
-            <Route path="/medication/:id/edit" element={<MedicationFormPage />} />
-            <Route path="/medication/new" element={<MedicationFormPage />} />
-            <Route path="/medication/stats" element={<MedicationStatsPage />} />
-            <Route path="/family-dashboard/:patientId" element={<FamilyDashboardPage />} />
-            <Route path="/vaccines" element={<VaccinesPage />} />
-            <Route path="/ai/report-analysis/:id" element={<AIReportAnalysisPage />} />
-            <Route path="/ai/visit-prep" element={<AIVisitPrepPage />} />
-            <Route path="/ai/case-summary" element={<AICaseSummaryPage />} />
-            <Route path="/" element={<Navigate to="/timeline" replace />} />
-          </Routes>
-        </main>
+    <div className="min-h-screen bg-[var(--color-bg)]">
+      <Routes>
+        {/* 管理后台路由 — 全宽桌面端布局 */}
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
+        <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
 
-        {/* 底部导航 */}
-        {showNav && <BottomNav />}
-      </div>
+        {/* 移动端App路由 — 居中容器 */}
+        <Route path="*" element={
+          <div className="flex justify-center">
+            <div className="w-full max-w-[430px] bg-[var(--color-surface)] min-h-screen shadow-2xl relative flex flex-col">
+              <main className="flex-1 overflow-y-auto pb-20">
+                <Routes>
+                  <Route path="/timeline" element={<TimelinePage />} />
+                  <Route path="/records" element={<RecordsPage />} />
+                  <Route path="/upload" element={<UploadPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/record/:id" element={<RecordDetailPage />} />
+                  <Route path="/ocr-confirm/:taskId" element={<OCRConfirmPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/abnormal-tests" element={<AbnormalTestsPage />} />
+                  <Route path="/abnormal-test/:recordId/:itemName" element={<AbnormalTestDetailPage />} />
+                  <Route path="/medications" element={<MedicationsPage />} />
+                  <Route path="/medication/:id/edit" element={<MedicationFormPage />} />
+                  <Route path="/medication/new" element={<MedicationFormPage />} />
+                  <Route path="/medication/stats" element={<MedicationStatsPage />} />
+                  <Route path="/family-dashboard/:patientId" element={<FamilyDashboardPage />} />
+                  <Route path="/vaccines" element={<VaccinesPage />} />
+                  <Route path="/ai/report-analysis/:id" element={<AIReportAnalysisPage />} />
+                  <Route path="/ai/visit-prep" element={<AIVisitPrepPage />} />
+                  <Route path="/ai/case-summary" element={<AICaseSummaryPage />} />
+                  <Route path="/" element={<Navigate to="/timeline" replace />} />
+                </Routes>
+              </main>
+              {showNav && <BottomNav />}
+            </div>
+          </div>
+        } />
+      </Routes>
     </div>
   );
 }
