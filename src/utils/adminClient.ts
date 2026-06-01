@@ -208,3 +208,43 @@ export async function getAdminLogs(params?: {
   if (params?.targetUserId) query.set('targetUserId', params.targetUserId);
   return adminFetch(`/api/admin/logs?${query}`);
 }
+
+// ==================== 管理员重置用户密码 ====================
+
+export async function adminResetUserPassword(userId: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  return adminFetch(`/api/admin/users/${userId}/reset-password`, {
+    method: 'PATCH',
+    body: JSON.stringify({ newPassword }),
+  });
+}
+
+// ==================== 重置密钥管理 ====================
+
+export interface ResetKey {
+  id: string;
+  key_code: string;
+  user_id: string | null;
+  created_by: string;
+  created_at: number;
+  expires_at: number | null;
+  used_at: number | null;
+  used_by: string | null;
+  status: string;
+}
+
+export async function createResetKey(params?: { userId?: string; expiresInHours?: number }): Promise<{ success: boolean; data: { keyCode: string; expiresAt: number | null } }> {
+  return adminFetch('/api/admin/reset-keys', {
+    method: 'POST',
+    body: JSON.stringify(params || {}),
+  });
+}
+
+export async function getResetKeys(): Promise<{ success: boolean; data: ResetKey[] }> {
+  return adminFetch('/api/admin/reset-keys');
+}
+
+export async function deleteResetKey(id: string): Promise<{ success: boolean; message: string }> {
+  return adminFetch(`/api/admin/reset-keys/${id}`, {
+    method: 'DELETE',
+  });
+}

@@ -145,6 +145,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/family', familyRoutes);
+app.use('/api/admin/reset-keys', require('./routes/resetKey'));
 
 // ==================== Error Handling ====================
 

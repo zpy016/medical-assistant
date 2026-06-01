@@ -12,6 +12,10 @@ const {
   updateFamilyMemberStatus,
   deleteFamilyMember,
   findUserById,
+  findUserByPhone,
+  getSharedPatientData,
+  getFamilyMembersByInvitedUserWithDetails,
+  getAcceptedFamilyMembersByInvitedUser,
 } = require('../database');
 
 const router = express.Router();
@@ -20,18 +24,31 @@ const router = express.Router();
 
 router.post('/invite', authMiddleware, (req, res) => {
   try {
-    const { invitedUserId, patientId, relation, permission } = req.body;
-    if (!invitedUserId || !patientId || !relation) {
-      return res.status(400).json({ error: 'invitedUserId, patientId, relation are required' });
+    const { invitedUserId, phone, patientId, relation, permission } = req.body;
+    if (!patientId || !relation) {
+      return res.status(400).json({ error: 'patientId and relation are required' });
+    }
+    if (!invitedUserId && !phone) {
+      return res.status(400).json({ error: 'invitedUserId or phone is required' });
+    }
+
+    // 通过手机号查找用户
+    let targetUserId = invitedUserId;
+    if (!targetUserId && phone) {
+      const user = findUserByPhone(phone);
+      if (!user) {
+        return res.status(404).json({ error: 'User with this phone number not found. Please ask them to register first.' });
+      }
+      targetUserId = user.id;
     }
 
     // 不能邀请自己
-    if (invitedUserId === req.userId) {
+    if (targetUserId === req.userId) {
       return res.status(400).json({ error: 'Cannot invite yourself' });
     }
 
     // 检查被邀请用户是否存在
-    const invitedUser = findUserById(invitedUserId);
+    const invitedUser = findUserById(targetUserId);
     if (!invitedUser) {
       return res.status(404).json({ error: 'Invited user not found' });
     }
@@ -40,7 +57,7 @@ router.post('/invite', authMiddleware, (req, res) => {
     createFamilyMember({
       id: memberId,
       userId: req.userId,
-      invitedUserId,
+      invitedUserId: targetUserId,
       patientId,
       relation,
       permission: permission || 'view',
@@ -50,7 +67,7 @@ router.post('/invite', authMiddleware, (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: { id: memberId, invitedUserId, patientId, relation, status: 'pending' },
+      data: { id: memberId, invitedUserId: targetUserId, patientId, relation, status: 'pending' },
     });
   } catch (error) {
     console.error('[Family Invite] Error:', error.message);
@@ -74,7 +91,7 @@ router.get('/sent', authMiddleware, (req, res) => {
 
 router.get('/received', authMiddleware, (req, res) => {
   try {
-    const members = getFamilyMembersByInvitedUser(req.userId);
+    const members = getFamilyMembersByInvitedUserWithDetails(req.userId);
     res.json({ success: true, data: members });
   } catch (error) {
     console.error('[Family Received] Error:', error.message);
@@ -130,6 +147,33 @@ router.delete('/:id', authMiddleware, (req, res) => {
     res.json({ success: true, message: 'Family member removed' });
   } catch (error) {
     console.error('[Family Delete] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== 获取共享给我的患者列表 ====================
+
+router.get('/shared-patients', authMiddleware, (req, res) => {
+  try {
+    const members = getAcceptedFamilyMembersByInvitedUser(req.userId);
+    res.json({ success: true, data: members });
+  } catch (error) {
+    console.error('[Family SharedPatients] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== 获取特定共享患者的完整数据 ====================
+
+router.get('/shared-data/:patientId', authMiddleware, (req, res) => {
+  try {
+    const data = getSharedPatientData(req.userId, req.params.patientId);
+    if (!data) {
+      return res.status(403).json({ error: 'No access to this patient data' });
+    }
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[Family SharedData] Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

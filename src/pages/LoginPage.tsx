@@ -169,13 +169,21 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </button>
 
         {/* 切换模式 */}
-        <div className="text-center">
+        <div className="text-center space-y-2">
           <button
             onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-            className="text-xs text-[var(--color-primary)]"
+            className="text-xs text-[var(--color-primary)] block w-full"
           >
             {mode === 'login' ? '还没有账号？立即注册' : '已有账号？直接登录'}
           </button>
+          {mode === 'login' && (
+            <button
+              onClick={() => navigate('/reset-password')}
+              className="text-xs text-[var(--color-text-muted)] block w-full"
+            >
+              忘记密码？使用重置密钥
+            </button>
+          )}
         </div>
       </div>
 

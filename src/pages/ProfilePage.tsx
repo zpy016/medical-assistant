@@ -7,14 +7,20 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecordStore } from '../stores/recordStore';
 import { exportAllData, clearAllData } from '../db';
-import { isLoggedIn, getCurrentUser, clearAuthToken, autoSync, syncDownload } from '../services/syncService';
+import type { SharedPatient, SharedInvitation } from '../types';
+import {
+  isLoggedIn, getCurrentUser, clearAuthToken, autoSync, syncDownload,
+  getSharedPatients, getReceivedInvitations, getSentInvitations,
+  inviteFamilyMember, acceptInvitation, rejectInvitation, cancelInvitation,
+} from '../services/syncService';
 import { downloadJSON, convertToCSV } from '../utils/helpers';
 import {
-  Users, Download, Trash2, Settings, Shield,
+  Users, User, Download, Trash2, Settings, Shield,
   ChevronRight, FileJson, FileSpreadsheet, AlertTriangle,
   Plus, X, Check, UserPlus, Eye, Pencil, UserCog,
   Cloud, CloudOff, LogOut, LogIn, RefreshCw,
-  FlaskConical, Pill, Syringe, HeartPulse, Activity
+  FlaskConical, Pill, Syringe, HeartPulse, Activity,
+  Share2, Phone, Bell, Send, CheckCircle2, XCircle
 } from 'lucide-react';
 
 const RELATION_OPTIONS = [
@@ -48,10 +54,113 @@ export default function ProfilePage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
 
+  // 患者分享
+  const [sharedPatients, setSharedPatients] = useState<SharedPatient[]>([]);
+  const [receivedInvites, setReceivedInvites] = useState<SharedInvitation[]>([]);
+  const [sentInvites, setSentInvites] = useState<SharedInvitation[]>([]);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [sharePhone, setSharePhone] = useState('');
+  const [sharePatientId, setSharePatientId] = useState('');
+  const [shareRelation, setShareRelation] = useState('other');
+  const [sharePermission, setSharePermission] = useState<'view' | 'edit'>('view');
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState('');
+  const [shareSuccess, setShareSuccess] = useState('');
+  const [shareTab, setShareTab] = useState<'received' | 'sent'>('received');
+
   // 加载家庭成员
   useEffect(() => {
     loadFamilyMembers();
   }, [loadFamilyMembers]);
+
+  // 加载共享患者和邀请
+  useEffect(() => {
+    if (!loggedIn) return;
+    loadSharedData();
+  }, [loggedIn]);
+
+  const loadSharedData = async () => {
+    try {
+      const [spResult, rcResult, stResult] = await Promise.all([
+        getSharedPatients().catch(() => ({ data: [] })),
+        getReceivedInvitations().catch(() => ({ data: [] })),
+        getSentInvitations().catch(() => ({ data: [] })),
+      ]);
+      setSharedPatients(spResult.data || []);
+      setReceivedInvites((rcResult.data || []).map((m: any) => ({
+        id: m.id,
+        inviterName: m.inviter_name || '未知用户',
+        inviterPhone: m.inviter_phone || '',
+        patientName: m.patient_name || '未知患者',
+        relation: m.relation,
+        permission: m.permission,
+        invitedAt: m.invited_at,
+      })));
+      setSentInvites((stResult.data || []).map((m: any) => ({
+        id: m.id,
+        inviterName: m.invited_user_name || m.invited_user_phone || '',
+        inviterPhone: m.invited_user_phone || '',
+        patientName: m.patient_name || '未知患者',
+        relation: m.relation,
+        permission: m.permission,
+        invitedAt: m.invited_at,
+      })));
+    } catch (e) {
+      // 忽略错误
+    }
+  };
+
+  const handleSharePatient = async () => {
+    if (!sharePhone.trim() || !sharePatientId) {
+      setShareError('请输入手机号并选择患者');
+      return;
+    }
+    setShareLoading(true);
+    setShareError('');
+    setShareSuccess('');
+    try {
+      await inviteFamilyMember(sharePhone.trim(), sharePatientId, shareRelation, sharePermission);
+      setShareSuccess('分享成功！对方登录后即可查看。');
+      setSharePhone('');
+      setSharePatientId('');
+      setTimeout(() => {
+        setShowShareDialog(false);
+        setShareSuccess('');
+        loadSharedData();
+      }, 1500);
+    } catch (e: any) {
+      setShareError(e.message || '分享失败');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleAcceptInvite = async (id: string) => {
+    try {
+      await acceptInvitation(id);
+      loadSharedData();
+    } catch (e: any) {
+      alert(e.message || '接受失败');
+    }
+  };
+
+  const handleRejectInvite = async (id: string) => {
+    try {
+      await rejectInvitation(id);
+      loadSharedData();
+    } catch (e: any) {
+      alert(e.message || '拒绝失败');
+    }
+  };
+
+  const handleCancelInvite = async (id: string) => {
+    try {
+      await cancelInvitation(id);
+      loadSharedData();
+    } catch (e: any) {
+      alert(e.message || '取消失败');
+    }
+  };
 
   const handleExport = async (format: 'json' | 'csv') => {
     const data = await exportAllData();
@@ -345,6 +454,151 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* 患者分享 */}
+      {loggedIn && (
+        <div className="px-4 mb-6">
+          <div className="bg-white rounded-xl border border-[var(--color-border)] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--color-border)]/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-[var(--color-primary)]" />
+                <span className="text-sm font-semibold">患者分享</span>
+              </div>
+              <button
+                onClick={() => setShowShareDialog(true)}
+                className="text-[10px] px-2.5 py-1 bg-[var(--color-primary)] text-white rounded-full flex items-center gap-1"
+              >
+                <Send className="w-3 h-3" />
+                分享患者
+              </button>
+            </div>
+
+            {/* 已收到的共享患者 */}
+            {sharedPatients.length > 0 && (
+              <div className="border-b border-[var(--color-border)]/50">
+                <div className="px-4 py-2 bg-[var(--color-bg)]/50">
+                  <span className="text-[10px] font-medium text-[var(--color-text-secondary)]">收到的患者</span>
+                </div>
+                {sharedPatients.map(sp => (
+                  <button
+                    key={sp.id}
+                    onClick={() => navigate(`/shared-patient/${sp.patient_id}`)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--color-bg)]/50 border-b border-[var(--color-border)]/30 last:border-0"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center">
+                        <User className="w-4 h-4 text-[var(--color-primary)]" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-medium">{sp.patient_name || '未知患者'}</p>
+                        <p className="text-[10px] text-[var(--color-text-muted)]">
+                          来自 {sp.inviter_name || sp.inviter_phone} · {sp.permission === 'edit' ? '可编辑' : '仅查看'}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)]" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 邀请标签页 */}
+            {(receivedInvites.length > 0 || sentInvites.length > 0) && (
+              <div>
+                <div className="flex border-b border-[var(--color-border)]/50">
+                  <button
+                    onClick={() => setShareTab('received')}
+                    className={`flex-1 py-2 text-xs font-medium text-center ${shareTab === 'received' ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]' : 'text-[var(--color-text-muted)]'}`}
+                  >
+                    收到的邀请 {receivedInvites.length > 0 && `(${receivedInvites.length})`}
+                  </button>
+                  <button
+                    onClick={() => setShareTab('sent')}
+                    className={`flex-1 py-2 text-xs font-medium text-center ${shareTab === 'sent' ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]' : 'text-[var(--color-text-muted)]'}`}
+                  >
+                    已发出 {sentInvites.length > 0 && `(${sentInvites.length})`}
+                  </button>
+                </div>
+
+                {shareTab === 'received' && (
+                  <div>
+                    {receivedInvites.length === 0 ? (
+                      <p className="text-xs text-[var(--color-text-muted)] text-center py-4">暂无待处理邀请</p>
+                    ) : (
+                      receivedInvites.map(inv => (
+                        <div key={inv.id} className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]/30 last:border-0">
+                          <div className="flex items-center gap-3">
+                            <Bell className="w-4 h-4 text-[var(--color-secondary)]" />
+                            <div>
+                              <p className="text-sm">{inv.inviterName} 分享了「{inv.patientName}」</p>
+                              <p className="text-[10px] text-[var(--color-text-muted)]">
+                                {inv.permission === 'edit' ? '可编辑' : '仅查看'} · {RELATION_OPTIONS.find(r => r.value === inv.relation)?.label || inv.relation}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleAcceptInvite(inv.id)}
+                              className="p-1.5 bg-green-50 text-green-600 rounded-lg"
+                              title="接受"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleRejectInvite(inv.id)}
+                              className="p-1.5 bg-red-50 text-[var(--color-danger)] rounded-lg"
+                              title="拒绝"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {shareTab === 'sent' && (
+                  <div>
+                    {sentInvites.length === 0 ? (
+                      <p className="text-xs text-[var(--color-text-muted)] text-center py-4">暂无已发出邀请</p>
+                    ) : (
+                      sentInvites.map(inv => (
+                        <div key={inv.id} className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]/30 last:border-0">
+                          <div className="flex items-center gap-3">
+                            <Send className="w-4 h-4 text-[var(--color-text-muted)]" />
+                            <div>
+                              <p className="text-sm">「{inv.patientName}」</p>
+                              <p className="text-[10px] text-[var(--color-text-muted)]">
+                                {inv.permission === 'edit' ? '可编辑' : '仅查看'} · {RELATION_OPTIONS.find(r => r.value === inv.relation)?.label || inv.relation}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleCancelInvite(inv.id)}
+                            className="p-1.5 hover:bg-red-50 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] rounded-lg"
+                            title="取消邀请"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {sharedPatients.length === 0 && receivedInvites.length === 0 && sentInvites.length === 0 && (
+              <div className="px-4 py-6 text-center">
+                <Share2 className="w-8 h-8 text-[var(--color-text-muted)] mx-auto mb-2" />
+                <p className="text-xs text-[var(--color-text-muted)]">分享患者给家人或医生</p>
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-1">对方登录后即可查看实时数据</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 健康管理入口 */}
       <div className="px-4 mb-6">
         <div className="bg-white rounded-xl border border-[var(--color-border)] overflow-hidden">
@@ -522,19 +776,120 @@ export default function ProfilePage() {
             <span className="text-sm font-medium">火山引擎OCR配置</span>
           </div>
           <p className="text-xs text-[var(--color-text-muted)] leading-relaxed mb-3">
-            当前使用模拟OCR模式。如需接入真实OCR服务，请配置火山引擎AccessKey。
-            所有处理均在本地完成，图片和识别结果不会上传到服务器。
+            已接入火山引擎 OCR 服务，通过后端代理调用。图片经压缩后发送到火山引擎进行识别，
+            识别结果仅在本地浏览器展示，不会存储到第三方服务器。
           </p>
-          <div className="bg-[var(--color-bg)] rounded-lg p-3">
-            <p className="text-xs text-[var(--color-text-secondary)] font-medium mb-1">接入步骤：</p>
-            <ol className="text-xs text-[var(--color-text-muted)] space-y-1 list-decimal list-inside">
-              <li>登录火山引擎控制台 → 视觉智能 → 开通OCR服务</li>
-              <li>右上角头像 → 密钥管理 → 获取 AccessKey ID / Secret</li>
-              <li>在代码中配置或通过后端代理调用（推荐）</li>
-            </ol>
+          <div className="bg-green-50 rounded-lg p-3">
+            <p className="text-xs text-green-700 font-medium mb-1">✅ 火山引擎 OCR 已配置</p>
+            <p className="text-xs text-green-600 leading-relaxed">
+              图片上传后会通过后端代理调用火山引擎 OCR 服务进行识别。识别结果仅在本地展示，不会存储到第三方服务器。
+            </p>
           </div>
         </div>
       </div>
+
+      {/* 分享患者弹窗 */}
+      {showShareDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--color-border)]/50 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">分享患者</h3>
+              <button onClick={() => setShowShareDialog(false)} className="p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              {/* 手机号 */}
+              <div>
+                <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">对方手机号</label>
+                <div className="flex items-center gap-2 px-3 py-2 border border-[var(--color-border)] rounded-lg">
+                  <Phone className="w-4 h-4 text-[var(--color-text-muted)]" />
+                  <input
+                    type="tel"
+                    placeholder="输入已注册的手机号"
+                    value={sharePhone}
+                    onChange={(e) => setSharePhone(e.target.value)}
+                    className="flex-1 text-sm outline-none bg-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* 选择患者 */}
+              <div>
+                <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">选择患者</label>
+                <select
+                  value={sharePatientId}
+                  onChange={(e) => setSharePatientId(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)] bg-white"
+                >
+                  <option value="">请选择患者</option>
+                  {patients.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 关系 */}
+              <div>
+                <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">关系</label>
+                <select
+                  value={shareRelation}
+                  onChange={(e) => setShareRelation(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)] bg-white"
+                >
+                  {RELATION_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 权限 */}
+              <div>
+                <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">权限</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSharePermission('view')}
+                    className={`flex-1 py-2 rounded-lg text-sm border ${sharePermission === 'view' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}
+                  >
+                    <Eye className="w-3.5 h-3.5 inline mr-1" />
+                    仅查看
+                  </button>
+                  <button
+                    onClick={() => setSharePermission('edit')}
+                    className={`flex-1 py-2 rounded-lg text-sm border ${sharePermission === 'edit' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}
+                  >
+                    <Pencil className="w-3.5 h-3.5 inline mr-1" />
+                    可编辑
+                  </button>
+                </div>
+              </div>
+
+              {/* 错误/成功提示 */}
+              {shareError && (
+                <p className="text-xs text-[var(--color-danger)]">{shareError}</p>
+              )}
+              {shareSuccess && (
+                <p className="text-xs text-green-600">{shareSuccess}</p>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-[var(--color-border)]/50 flex gap-2">
+              <button
+                onClick={() => setShowShareDialog(false)}
+                className="flex-1 py-2 bg-[var(--color-bg)] text-[var(--color-text-secondary)] rounded-lg text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSharePatient}
+                disabled={shareLoading}
+                className="flex-1 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {shareLoading ? '发送中...' : '确认分享'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 关于 */}
       <div className="px-4 mb-8">

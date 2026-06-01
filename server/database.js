@@ -128,6 +128,23 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_family_members_invited ON family_members(invited_user_id);
   `);
 
+  // 重置密钥表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reset_keys (
+      id TEXT PRIMARY KEY,
+      key_code TEXT UNIQUE NOT NULL,
+      user_id TEXT,
+      created_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER,
+      used_at INTEGER,
+      used_by TEXT,
+      status TEXT DEFAULT 'active'
+    );
+    CREATE INDEX IF NOT EXISTS idx_reset_keys_code ON reset_keys(key_code);
+    CREATE INDEX IF NOT EXISTS idx_reset_keys_status ON reset_keys(status);
+  `);
+
   // 用药提醒表
   db.exec(`
     CREATE TABLE IF NOT EXISTS medications (
@@ -542,7 +559,13 @@ function createFamilyMember(member) {
 }
 
 function getFamilyMembersByUser(userId) {
-  const stmt = db.prepare('SELECT * FROM family_members WHERE user_id = ?');
+  const stmt = db.prepare(`
+    SELECT fm.*, p.name as patient_name, u.name as invited_user_name, u.phone as invited_user_phone
+    FROM family_members fm
+    LEFT JOIN patients p ON fm.patient_id = p.id
+    LEFT JOIN users u ON fm.invited_user_id = u.id
+    WHERE fm.user_id = ?
+  `);
   return stmt.all(userId).map(row => ({
     ...row,
     userId: row.user_id,
@@ -642,6 +665,91 @@ function getUserActivityDates(userId, days = 30) {
   return rows.map(r => r.date);
 }
 
+// ==================== 重置密钥 CRUD ====================
+
+function createResetKey(data) {
+  const stmt = db.prepare(`
+    INSERT INTO reset_keys (id, key_code, user_id, created_by, created_at, expires_at, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(data.id, data.keyCode, data.userId || null, data.createdBy, data.createdAt, data.expiresAt || null, 'active');
+  return data.id;
+}
+
+function findResetKeyByCode(keyCode) {
+  return db.prepare('SELECT * FROM reset_keys WHERE key_code = ?').get(keyCode);
+}
+
+function listResetKeys() {
+  return db.prepare('SELECT * FROM reset_keys ORDER BY created_at DESC').all();
+}
+
+function updateResetKeyUsed(id, usedBy, usedAt) {
+  const stmt = db.prepare(`
+    UPDATE reset_keys SET used_at = ?, used_by = ?, status = 'used' WHERE id = ?
+  `);
+  stmt.run(usedAt, usedBy, id);
+}
+
+function revokeResetKey(id) {
+  const stmt = db.prepare(`UPDATE reset_keys SET status = 'revoked' WHERE id = ?`);
+  stmt.run(id);
+}
+
+function deleteResetKey(id) {
+  const stmt = db.prepare(`DELETE FROM reset_keys WHERE id = ?`);
+  stmt.run(id);
+}
+
+// ==================== 管理员重置用户密码 ====================
+
+function updateUserPassword(userId, passwordHash) {
+  const stmt = db.prepare(`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`);
+  stmt.run(passwordHash, Date.now(), userId);
+}
+
+// ==================== 家庭成员共享查询 ====================
+
+function getFamilyMembersByInvitedUserWithDetails(invitedUserId) {
+  return db.prepare(`
+    SELECT fm.*, u.name as inviter_name, u.phone as inviter_phone, p.name as patient_name
+    FROM family_members fm
+    JOIN users u ON fm.user_id = u.id
+    JOIN patients p ON fm.patient_id = p.id
+    WHERE fm.invited_user_id = ? AND fm.status = 'pending'
+  `).all(invitedUserId);
+}
+
+function getAcceptedFamilyMembersByInvitedUser(invitedUserId) {
+  return db.prepare(`
+    SELECT fm.*, u.name as inviter_name, u.phone as inviter_phone, p.name as patient_name
+    FROM family_members fm
+    JOIN users u ON fm.user_id = u.id
+    JOIN patients p ON fm.patient_id = p.id
+    WHERE fm.invited_user_id = ? AND fm.status = 'accepted'
+  `).all(invitedUserId);
+}
+
+function getSharedPatientData(userId, patientId) {
+  // 验证用户是否有权限访问该患者
+  const access = db.prepare(`
+    SELECT 1 FROM family_members
+    WHERE invited_user_id = ? AND patient_id = ? AND status = 'accepted'
+  `).get(userId, patientId);
+  if (!access) return null;
+
+  // 获取患者数据
+  const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
+  const records = db.prepare('SELECT * FROM records WHERE patient_id = ?').all(patientId);
+  const visitEvents = db.prepare('SELECT * FROM visit_events WHERE patient_id = ?').all(patientId);
+  const medications = db.prepare('SELECT * FROM medications WHERE patient_id = ?').all(patientId);
+  const medicationLogs = db.prepare('SELECT * FROM medication_logs WHERE patient_id = ?').all(patientId);
+  const followUps = db.prepare('SELECT * FROM follow_up_reminders WHERE patient_id = ?').all(patientId);
+  const vaccinations = db.prepare('SELECT * FROM vaccination_records WHERE patient_id = ?').all(patientId);
+
+  return { patient, records, visitEvents, medications, medicationLogs, followUps, vaccinations };
+}
+
 // ==================== 数据导出 ====================
 
 function exportUserData(userId) {
@@ -697,6 +805,19 @@ module.exports = {
   // 用户活跃
   recordUserActivity,
   getUserActivityDates,
+  // 重置密钥
+  createResetKey,
+  findResetKeyByCode,
+  listResetKeys,
+  updateResetKeyUsed,
+  revokeResetKey,
+  deleteResetKey,
+  // 管理员
+  updateUserPassword,
+  // 家庭成员共享
+  getFamilyMembersByInvitedUserWithDetails,
+  getAcceptedFamilyMembersByInvitedUser,
+  getSharedPatientData,
   // 导出
   exportUserData,
 };

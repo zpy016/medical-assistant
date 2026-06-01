@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import type {
   Patient, MedicalRecord, VisitEvent, FilterOptions,
   UploadTask, DocumentType, RecordStatus, StructuredData, OCRResult, FamilyMember,
+  SharedPatient, SharedInvitation,
 } from '../types';
 import * as db from '../db';
 import { parseDateFromText, generateId, groupRecordsByVisit } from '../utils/helpers';
@@ -22,6 +23,9 @@ interface RecordState {
   records: MedicalRecord[];
   visitEvents: VisitEvent[];
   familyMembers: FamilyMember[];
+  sharedPatients: SharedPatient[];
+  receivedInvitations: SharedInvitation[];
+  sentInvitations: SharedInvitation[];
   uploadTasks: UploadTask[];
 
   // UI状态
@@ -42,6 +46,12 @@ interface RecordState {
   addFamilyMember: (member: Omit<FamilyMember, 'invitedAt'>) => Promise<void>;
   removeFamilyMember: (id: string) => Promise<void>;
   updateFamilyMemberPermission: (id: string, permission: FamilyMember['permission']) => Promise<void>;
+
+  // 跨用户共享
+  loadSharedPatients: () => Promise<void>;
+  setSharedPatients: (patients: SharedPatient[]) => void;
+  setReceivedInvitations: (invitations: SharedInvitation[]) => void;
+  setSentInvitations: (invitations: SharedInvitation[]) => void;
 
   // 上传与OCR
   addUploadTask: (file: File) => string;
@@ -73,6 +83,9 @@ export const useRecordStore = create<RecordState>((set, get) => ({
   records: [],
   visitEvents: [],
   familyMembers: [],
+  sharedPatients: [],
+  receivedInvitations: [],
+  sentInvitations: [],
   uploadTasks: [],
   isLoading: false,
   selectedRecordId: null,
@@ -140,6 +153,23 @@ export const useRecordStore = create<RecordState>((set, get) => ({
     await db.updateFamilyMember(id, { permission });
     await get().loadFamilyMembers();
   },
+
+  // ---- 跨用户共享 ----
+
+  loadSharedPatients: async () => {
+    // 从 API 加载（不存储到 IndexedDB）
+    const { getSharedPatients } = await import('../services/syncService');
+    try {
+      const result = await getSharedPatients();
+      set({ sharedPatients: result.data || [] });
+    } catch (e) {
+      // 未登录或网络错误，忽略
+    }
+  },
+
+  setSharedPatients: (patients) => set({ sharedPatients: patients }),
+  setReceivedInvitations: (invitations) => set({ receivedInvitations: invitations }),
+  setSentInvitations: (invitations) => set({ sentInvitations: invitations }),
 
   // ---- 上传与OCR ----
 

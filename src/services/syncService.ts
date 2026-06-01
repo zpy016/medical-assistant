@@ -159,3 +159,56 @@ export async function autoSync(): Promise<{ uploaded: boolean; message: string }
     return { uploaded: false, message: `同步失败: ${msg}` };
   }
 }
+
+// ==================== 家人共享 API ====================
+
+const API_BASE = '';
+
+async function familyFetch(path: string, options?: RequestInit) {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/api/family${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function inviteFamilyMember(phone: string, patientId: string, relation: string, permission: 'view' | 'edit') {
+  return familyFetch('/invite', { method: 'POST', body: JSON.stringify({ phone, patientId, relation, permission }) });
+}
+
+export async function getSentInvitations() {
+  return familyFetch('/sent');
+}
+
+export async function getReceivedInvitations() {
+  return familyFetch('/received');
+}
+
+export async function acceptInvitation(id: string) {
+  return familyFetch(`/accept/${id}`, { method: 'POST' });
+}
+
+export async function rejectInvitation(id: string) {
+  return familyFetch(`/reject/${id}`, { method: 'POST' });
+}
+
+export async function cancelInvitation(id: string) {
+  return familyFetch(`/${id}`, { method: 'DELETE' });
+}
+
+export async function getSharedPatients() {
+  return familyFetch('/shared-patients');
+}
+
+export async function getSharedPatientData(patientId: string) {
+  return familyFetch(`/shared-data/${patientId}`);
+}

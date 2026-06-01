@@ -7,7 +7,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUserList, updateUserStatus, clearAdminToken } from '../utils/adminClient';
 import type { UserListItem } from '../utils/adminClient';
-import { Search, Filter, ChevronLeft, ChevronRight, Shield, LogOut, UserX, UserCheck, Trash2, Eye } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, Shield, LogOut, UserX, UserCheck, Trash2, Eye, KeyRound } from 'lucide-react';
+import { adminResetUserPassword } from '../utils/adminClient';
 
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
   active: { label: '正常', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
@@ -25,6 +26,10 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserListItem | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -55,6 +60,27 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetTarget || !resetPassword || resetPassword.length < 6) {
+      setResetError('密码至少6位');
+      return;
+    }
+    setActionLoading(resetTarget.id);
+    try {
+      await adminResetUserPassword(resetTarget.id, resetPassword);
+      setResetSuccess(`用户 ${resetTarget.phone} 的密码已重置`);
+      setResetPassword('');
+      setTimeout(() => {
+        setResetSuccess('');
+        setResetTarget(null);
+      }, 2000);
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : '重置失败');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const totalPages = Math.ceil(total / pageSize);
 
   return (
@@ -67,6 +93,12 @@ export default function AdminUsersPage() {
           <span className="text-xs text-gray-400">共 {total} 人</span>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/admin/reset-keys')}
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          >
+            重置密钥管理
+          </button>
           <button
             onClick={() => navigate('/admin/dashboard')}
             className="text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -172,6 +204,13 @@ export default function AdminUsersPage() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+                            <button
+                              onClick={() => { setResetTarget(user); setResetPassword(''); setResetError(''); setResetSuccess(''); }}
+                              className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg"
+                              title="重置密码"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </button>
                             {user.status === 'active' && (
                               <button
                                 onClick={() => handleStatusChange(user.id, 'disabled')}
@@ -240,6 +279,43 @@ export default function AdminUsersPage() {
           )}
         </div>
       </main>
+
+      {/* 重置密码弹窗 */}
+      {resetTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm mx-4 shadow-xl">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">重置密码</h3>
+            <p className="text-sm text-gray-500 mb-4">用户: {resetTarget.phone}</p>
+
+            <input
+              type="text"
+              value={resetPassword}
+              onChange={e => { setResetPassword(e.target.value); setResetError(''); }}
+              placeholder="输入新密码（至少6位）"
+              className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none mb-3"
+            />
+
+            {resetError && <p className="text-xs text-red-500 mb-3">{resetError}</p>}
+            {resetSuccess && <p className="text-xs text-emerald-600 mb-3">{resetSuccess}</p>}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setResetTarget(null)}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleResetPassword}
+                disabled={actionLoading === resetTarget.id}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {actionLoading === resetTarget.id ? '重置中...' : '确认重置'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

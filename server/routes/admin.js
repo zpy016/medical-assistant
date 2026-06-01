@@ -22,6 +22,7 @@ const {
   getAdminLogs,
   recordUserActivity,
   exportUserData,
+  updateUserPassword,
 } = require('../database');
 
 const router = express.Router();
@@ -160,6 +161,36 @@ router.delete('/users/:id', adminMiddleware, (req, res) => {
     res.json({ success: true, message: 'User and all data permanently deleted' });
   } catch (error) {
     console.error('[Admin Delete] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 管理员重置用户密码
+router.patch('/users/:id/reset-password', adminMiddleware, async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = findUserById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    updateUserPassword(req.params.id, passwordHash);
+
+    createAdminLog({
+      adminId: req.userId,
+      action: 'reset_password',
+      targetUserId: req.params.id,
+      details: JSON.stringify({ phone: user.phone }),
+    });
+
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('[Admin ResetPassword] Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

@@ -32,6 +32,9 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import AdminUserDetailPage from './pages/AdminUserDetailPage';
+import AdminResetKeysPage from './pages/AdminResetKeysPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import SharedPatientViewPage from './pages/SharedPatientViewPage';
 import { initDemoData } from './utils/demoData';
 
 function App() {
@@ -75,6 +78,7 @@ function App() {
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
+        <Route path="/admin/reset-keys" element={<AdminResetKeysPage />} />
 
         {/* 移动端App路由 — 居中容器 */}
         <Route path="*" element={
@@ -89,6 +93,7 @@ function App() {
                   <Route path="/record/:id" element={<RecordDetailPage />} />
                   <Route path="/ocr-confirm/:taskId" element={<OCRConfirmPage />} />
                   <Route path="/login" element={<LoginPage />} />
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
                   <Route path="/abnormal-tests" element={<AbnormalTestsPage />} />
                   <Route path="/abnormal-test/:recordId/:itemName" element={<AbnormalTestDetailPage />} />
                   <Route path="/medications" element={<MedicationsPage />} />
@@ -96,6 +101,7 @@ function App() {
                   <Route path="/medication/new" element={<MedicationFormPage />} />
                   <Route path="/medication/stats" element={<MedicationStatsPage />} />
                   <Route path="/family-dashboard/:patientId" element={<FamilyDashboardPage />} />
+                  <Route path="/shared-patient/:patientId" element={<SharedPatientViewPage />} />
                   <Route path="/vaccines" element={<VaccinesPage />} />
                   <Route path="/ai/report-analysis/:id" element={<AIReportAnalysisPage />} />
                   <Route path="/ai/visit-prep" element={<AIVisitPrepPage />} />

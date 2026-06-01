@@ -8,7 +8,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { generateToken, authMiddleware } = require('../middleware/auth');
-const { createUser, findUserByPhone, findUserById, updateUserLastActive, updateUserDeletedAt, updateUserStatus, exportUserData, recordUserActivity } = require('../database');
+const { createUser, findUserByPhone, findUserById, updateUserLastActive, updateUserDeletedAt, updateUserStatus, exportUserData, recordUserActivity, findResetKeyByCode, updateResetKeyUsed, updateUserPassword } = require('../database');
 
 const router = express.Router();
 const SALT_ROUNDS = 10;
@@ -194,6 +194,70 @@ router.get('/export/csv', authMiddleware, (req, res) => {
     res.send('\uFEFF' + csv); // BOM for Excel
   } catch (error) {
     console.error('[Auth ExportCSV] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 验证重置密钥
+router.post('/verify-reset-key', (req, res) => {
+  try {
+    const { keyCode } = req.body;
+    if (!keyCode) {
+      return res.status(400).json({ error: 'Key code is required' });
+    }
+
+    const key = findResetKeyByCode(keyCode);
+    if (!key) {
+      return res.status(404).json({ error: 'Invalid key code' });
+    }
+    if (key.status !== 'active') {
+      return res.status(400).json({ error: `Key is ${key.status}` });
+    }
+    if (key.expires_at && Date.now() > key.expires_at) {
+      return res.status(400).json({ error: 'Key has expired' });
+    }
+
+    res.json({ success: true, valid: true });
+  } catch (error) {
+    console.error('[Auth VerifyKey] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 用密钥重置密码
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { keyCode, newPassword } = req.body;
+    if (!keyCode || !newPassword) {
+      return res.status(400).json({ error: 'Key code and new password are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const key = findResetKeyByCode(keyCode);
+    if (!key || key.status !== 'active') {
+      return res.status(400).json({ error: 'Invalid or used key code' });
+    }
+    if (key.expires_at && Date.now() > key.expires_at) {
+      return res.status(400).json({ error: 'Key has expired' });
+    }
+
+    // 如果密钥绑定了特定用户
+    let targetUserId = key.user_id;
+    if (!targetUserId) {
+      // 通用密钥：需要用户先登录或提供手机号
+      return res.status(400).json({ error: 'Please provide your phone number with a generic key' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    updateUserPassword(targetUserId, passwordHash);
+    // 密钥可复用，不标记为 used
+    // updateResetKeyUsed(key.id, targetUserId, Date.now());
+
+    res.json({ success: true, message: 'Password reset successfully. Please login with your new password.' });
+  } catch (error) {
+    console.error('[Auth ResetPassword] Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

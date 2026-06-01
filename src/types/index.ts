@@ -384,3 +384,34 @@ export interface HealthOverview {
   recentAbnormalTests: number;
   lastVisitDate?: string;
 }
+
+// ==================== 家人共享（跨用户）====================
+
+/** 共享患者 */
+export interface SharedPatient {
+  id: string;
+  user_id: string;
+  invited_user_id: string;
+  patient_id: string;
+  relation: string;
+  permission: 'view' | 'edit';
+  status: 'pending' | 'accepted' | 'rejected';
+  invited_at: number;
+  accepted_at?: number;
+  inviter_name?: string;
+  inviter_phone?: string;
+  patient_name?: string;
+  patient_gender?: string;
+  patient_birth_date?: string;
+}
+
+/** 共享邀请 */
+export interface SharedInvitation {
+  id: string;
+  inviterName: string;
+  inviterPhone: string;
+  patientName: string;
+  relation: string;
+  permission: 'view' | 'edit';
+  invitedAt: number;
+}

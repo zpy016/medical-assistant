@@ -1,137 +1,46 @@
-name: 🚀 Deploy Medical Assistant
+name: Deploy to Server
 
 on:
   push:
     branches: [main, master]
-  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: 'npm'
 
-      # ─── 构建前端 ───
-      - name: 📦 Build frontend
+      - name: Install dependencies & Build frontend
         run: |
           npm ci
           npm run build
-          echo "=== dist tree ==="
-          find dist -type f | sort
 
-      # ─── 打包成 tar.gz（单文件传输，最可靠）───
-      - name: 📦 Pack frontend & backend
-        run: |
-          cd dist && tar czf ../frontend.tar.gz . && cd ..
-          cd server && tar czf ../backend.tar.gz . && cd ..
-          echo "=== frontend.tar.gz contents ==="
-          tar tzf frontend.tar.gz | sort
-          echo "=== backend.tar.gz contents ==="
-          tar tzf backend.tar.gz | sort
+      - name: Deploy frontend to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "dist/"
+          target: "/var/www/medical"
+          strip_components: 1
+          overwrite: true
 
-      - name: 📦 Install sshpass
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
-
-      # ─── scp 上传 tar.gz（单文件，无 glob 问题）───
-      - name: 🚀 Upload archives
-        run: |
-          sshpass -p "${{ secrets.SERVER_PASSWORD }}" \
-            scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            frontend.tar.gz backend.tar.gz \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:/tmp/
-
-      # ─── SSH 解压 + 配置 + 验证 ───
-      - name: 🔄 Extract & configure server
+      - name: Deploy backend & restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_IP }}
+          host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            set -e
-            echo "========== DEPLOY START =========="
-
-            # ── 前端 ──
-            echo "[1/5] Extracting frontend..."
-            mkdir -p /var/www/medical
-            rm -rf /var/www/medical/*
-            cd /var/www/medical
-            tar xzf /tmp/frontend.tar.gz
-            echo "--- frontend files ---"
-            find . -type f | sort
-
-            # ── 后端 ──
-            echo "[2/5] Extracting backend..."
-            mkdir -p /opt/medical-server
-            rm -rf /opt/medical-server/*
             cd /opt/medical-server
-            tar xzf /tmp/backend.tar.gz
-            cat > .env << 'EOF'
-            VOLC_AK=${{ secrets.VOLC_AK }}
-            VOLC_SK=${{ secrets.VOLC_SK }}
-            VOLC_REGION=cn-north-1
-            PORT=3001
-            EOF
-            npm install --production 2>/dev/null || true
-
-            # ── systemd ──
-            echo "[3/5] Configuring systemd..."
-            if [ -f /opt/medical-server/medical-backend.service ]; then
-              cp /opt/medical-server/medical-backend.service /etc/systemd/system/ 2>/dev/null || true
-              systemctl daemon-reload 2>/dev/null || true
-              systemctl enable medical-backend 2>/dev/null || true
-            fi
-            systemctl restart medical-backend 2>/dev/null || true
-            sleep 2
-            systemctl status medical-backend --no-pager 2>/dev/null || true
-
-            # ── Nginx ──
-            echo "[4/5] Configuring Nginx..."
-            cat > /etc/nginx/sites-available/medical << 'EOF'
-            server {
-                listen 8050;
-                server_name _;
-                root /var/www/medical;
-                index index.html;
-                location / {
-                    try_files $uri $uri/ /index.html;
-                }
-                location /api/ {
-                    proxy_pass http://127.0.0.1:3001;
-                    proxy_http_version 1.1;
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_read_timeout 60s;
-                    proxy_connect_timeout 60s;
-                    client_max_body_size 20M;
-                }
-                location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
-                    expires 1M;
-                    add_header Cache-Control "public, immutable";
-                }
-                gzip on;
-                gzip_types text/plain text/css application/javascript application/json;
-            }
-            EOF
-            rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-            ln -sf /etc/nginx/sites-available/medical /etc/nginx/sites-enabled/medical
-            nginx -t && systemctl restart nginx
-
-            # ── 验证 ──
-            echo "[5/5] Verifying..."
-            echo "--- HTTP status checks ---"
-            curl -s -o /dev/null -w "index.html:  %{http_code}\n" http://127.0.0.1:8050/
-            JS=$(find /var/www/medical/assets -name '*.js' | head -1)
-            CSS=$(find /var/www/medical/assets -name '*.css' | head -1)
-            curl -s -o /dev/null -w "JS:        %{http_code}  ($JS)\n" "http://127.0.0.1:8050${JS#/var/www/medical}" || true
-            curl -s -o /dev/null -w "CSS:       %{http_code}  ($CSS)\n" "http://127.0.0.1:8050${CSS#/var/www/medical}" || true
-            curl -s -o /dev/null -w "API:       %{http_code}\n" http://127.0.0.1:8050/api/health || true
-
-            echo "========== DEPLOY DONE =========="
+            git pull origin main || git pull origin master
+            npm ci --production
+            systemctl restart medical-backend
