@@ -1,0 +1,89 @@
+.stats-row-ab {
+  display: flex;
+  gap: 16rpx;
+}
+
+.stat-card-ab {
+  flex: 1;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-num-ab {
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.stat-label-ab {
+  font-size: 22rpx;
+  color: var(--gray-500);
+  margin-top: 4rpx;
+}
+
+.filter-bar-ab {
+  margin-bottom: 16rpx;
+}
+
+.filter-scroll {
+  white-space: nowrap;
+}
+
+.filter-chips-row {
+  display: inline-flex;
+  gap: 12rpx;
+}
+
+.filter-chip-ab {
+  display: inline-flex;
+  padding: 8rpx 20rpx;
+  border-radius: 100rpx;
+  font-size: 24rpx;
+  color: var(--gray-600);
+  background: #fff;
+  border: 2rpx solid var(--gray-200);
+}
+
+.filter-chip-ab-active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.ab-list {
+  padding: 0 24rpx;
+  padding-bottom: 40rpx;
+}
+
+.ab-group {
+  margin-bottom: 24rpx;
+}
+
+.ab-group-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+.ab-card {
+  margin-bottom: 16rpx;
+}
+
+.ab-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: 16rpx;
+}
+
+.ab-reminder-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}

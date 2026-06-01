@@ -1,5 +1,8 @@
 import { create } from 'zustand';
-import { VisitEvent, Patient, FamilyMember } from '../utils/types';
+import {
+  VisitEvent, Patient, FamilyMember,
+  MedicationReminder, VaccinationRecord, FollowUpReminder, MedicationLog
+} from '../utils/types';
 import * as storage from '../utils/storage';
 
 interface RecordState {
@@ -11,6 +14,12 @@ interface RecordState {
   isLoading: boolean;
   isSynced: boolean;
   lastSyncAt: string | null;
+
+  // P1 数据
+  medications: MedicationReminder[];
+  vaccinationRecords: VaccinationRecord[];
+  followUpReminders: FollowUpReminder[];
+  medicationLogs: MedicationLog[];
 
   // 筛选
   filterVisitTypes: string[];
@@ -36,6 +45,20 @@ interface RecordState {
   setLastSyncAt: (time: string | null) => void;
   loadFromStorage: () => void;
   saveToStorage: () => void;
+
+  // P1 Actions
+  setMedications: (medications: MedicationReminder[]) => void;
+  addMedication: (med: MedicationReminder) => void;
+  updateMedication: (id: string, updates: Partial<MedicationReminder>) => void;
+  deleteMedication: (id: string) => void;
+  setVaccinationRecords: (records: VaccinationRecord[]) => void;
+  addVaccinationRecord: (record: VaccinationRecord) => void;
+  updateVaccinationRecord: (id: string, updates: Partial<VaccinationRecord>) => void;
+  setFollowUpReminders: (reminders: FollowUpReminder[]) => void;
+  addFollowUpReminder: (reminder: FollowUpReminder) => void;
+  completeFollowUpReminder: (id: string) => void;
+  setMedicationLogs: (logs: MedicationLog[]) => void;
+  addMedicationLog: (log: MedicationLog) => void;
 }
 
 const STORAGE_KEY = 'record_store';
@@ -49,6 +72,10 @@ export const useRecordStore = create<RecordState>((set, get) => ({
   isLoading: false,
   isSynced: false,
   lastSyncAt: null,
+  medications: [],
+  vaccinationRecords: [],
+  followUpReminders: [],
+  medicationLogs: [],
   filterVisitTypes: [],
   filterHospitals: [],
   filterDepartments: [],
@@ -127,6 +154,10 @@ export const useRecordStore = create<RecordState>((set, get) => ({
           visitEvents: data.visitEvents || [],
           patients: data.patients || [],
           familyMembers: data.familyMembers || [],
+          medications: data.medications || [],
+          vaccinationRecords: data.vaccinationRecords || [],
+          followUpReminders: data.followUpReminders || [],
+          medicationLogs: data.medicationLogs || [],
           currentPatientId: storage.getItem('current_patient_id') || null
         });
       }
@@ -141,10 +172,77 @@ export const useRecordStore = create<RecordState>((set, get) => ({
       storage.setItem(STORAGE_KEY, {
         visitEvents: state.visitEvents,
         patients: state.patients,
-        familyMembers: state.familyMembers
+        familyMembers: state.familyMembers,
+        medications: state.medications,
+        vaccinationRecords: state.vaccinationRecords,
+        followUpReminders: state.followUpReminders,
+        medicationLogs: state.medicationLogs
       });
     } catch (e) {
       console.error('Save storage error:', e);
     }
+  },
+
+  // P1 Actions
+  setMedications: (medications) => set({ medications }),
+
+  addMedication: (med) => {
+    set((state) => ({ medications: [...state.medications, med] }));
+    get().saveToStorage();
+  },
+
+  updateMedication: (id, updates) => {
+    set((state) => ({
+      medications: state.medications.map((m) =>
+        m.id === id ? { ...m, ...updates, updatedAt: Date.now() } : m
+      )
+    }));
+    get().saveToStorage();
+  },
+
+  deleteMedication: (id) => {
+    set((state) => ({
+      medications: state.medications.filter((m) => m.id !== id)
+    }));
+    get().saveToStorage();
+  },
+
+  setVaccinationRecords: (records) => set({ vaccinationRecords: records }),
+
+  addVaccinationRecord: (record) => {
+    set((state) => ({ vaccinationRecords: [...state.vaccinationRecords, record] }));
+    get().saveToStorage();
+  },
+
+  updateVaccinationRecord: (id, updates) => {
+    set((state) => ({
+      vaccinationRecords: state.vaccinationRecords.map((r) =>
+        r.id === id ? { ...r, ...updates, updatedAt: Date.now() } : r
+      )
+    }));
+    get().saveToStorage();
+  },
+
+  setFollowUpReminders: (reminders) => set({ followUpReminders: reminders }),
+
+  addFollowUpReminder: (reminder) => {
+    set((state) => ({ followUpReminders: [...state.followUpReminders, reminder] }));
+    get().saveToStorage();
+  },
+
+  completeFollowUpReminder: (id) => {
+    set((state) => ({
+      followUpReminders: state.followUpReminders.map((r) =>
+        r.id === id ? { ...r, isCompleted: true, completedAt: Date.now() } : r
+      )
+    }));
+    get().saveToStorage();
+  },
+
+  setMedicationLogs: (logs) => set({ medicationLogs: logs }),
+
+  addMedicationLog: (log) => {
+    set((state) => ({ medicationLogs: [...state.medicationLogs, log] }));
+    get().saveToStorage();
   }
 }));

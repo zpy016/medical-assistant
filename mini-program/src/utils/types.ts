@@ -97,3 +97,125 @@ export interface ICD10Entry {
   aliases: string[];
   category: string;
 }
+
+// ==================== P1 Types ====================
+
+/** 检验分析结果 */
+export interface TestItemAnalysis {
+  isAbnormal: boolean;
+  direction: 'high' | 'low' | null;
+  severity: 'mild' | 'moderate' | 'severe' | null;
+  numericValue: number | null;
+  numericMin: number | null;
+  numericMax: number | null;
+}
+
+/** 复查提醒 */
+export interface FollowUpReminder {
+  id: string;
+  patientId: string;
+  recordId: string;
+  testItemName: string;
+  abnormalValue: string;
+  referenceRange: string;
+  abnormalDirection: 'high' | 'low';
+  followUpDate: string;
+  reminderDays: number;
+  isCompleted: boolean;
+  completedAt?: number;
+  notes?: string;
+  createdAt: number;
+}
+
+/** 疫苗状态 */
+export type VaccineStatus = 'pending' | 'completed' | 'overdue' | 'skipped';
+
+/** 疫苗接种记录 */
+export interface VaccinationRecord {
+  id: string;
+  patientId: string;
+  vaccineId: string;
+  vaccineName: string;
+  doseNumber: number;
+  scheduledDate: string;
+  actualDate?: string;
+  status: VaccineStatus;
+  vaccinationSite?: string;
+  batchNumber?: string;
+  reaction?: string;
+  category: 'national' | 'optional';
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 服药频率 */
+export type MedicationFrequency =
+  | 'once_daily'
+  | 'twice_daily'
+  | 'three_times'
+  | 'four_times'
+  | 'before_bed'
+  | 'every_other_day'
+  | 'weekly'
+  | 'as_needed'
+  | 'custom';
+
+/** 用药提醒时间 */
+export interface MedicationReminderTime {
+  hour: number;
+  minute: number;
+  label: string;
+}
+
+/** 药物 */
+export interface MedicationReminder {
+  id: string;
+  patientId: string;
+  name: string;
+  specification?: string;
+  dosage?: string;
+  frequency: MedicationFrequency;
+  times: MedicationReminderTime[];
+  startDate: string;
+  endDate?: string;
+  route?: string;
+  notes?: string;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 服药打卡记录 */
+export interface MedicationLog {
+  id: string;
+  medicationId: string;
+  patientId: string;
+  scheduledTime: string; // YYYY-MM-DD HH:mm
+  takenAt?: number;
+  status: 'taken' | 'missed' | 'skipped' | 'pending';
+  notes?: string;
+}
+
+export const FREQUENCY_LABELS: Record<MedicationFrequency, string> = {
+  once_daily: '每日1次',
+  twice_daily: '每日2次',
+  three_times: '每日3次',
+  four_times: '每日4次',
+  before_bed: '睡前',
+  every_other_day: '隔日1次',
+  weekly: '每周1次',
+  as_needed: '按需',
+  custom: '自定义',
+};
+
+export const SEVERITY_LABELS: Record<string, string> = {
+  severe: '严重',
+  moderate: '中度',
+  mild: '轻度',
+};
+
+export const SEVERITY_COLORS: Record<string, string> = {
+  severe: '#ef4444',
+  moderate: '#f59e0b',
+  mild: '#f59e0b',
+};

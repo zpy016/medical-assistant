@@ -24,6 +24,9 @@ import MedicationFormPage from './pages/MedicationFormPage';
 import MedicationStatsPage from './pages/MedicationStatsPage';
 import FamilyDashboardPage from './pages/FamilyDashboardPage';
 import VaccinesPage from './pages/VaccinesPage';
+import AIReportAnalysisPage from './pages/AIReportAnalysisPage';
+import AIVisitPrepPage from './pages/AIVisitPrepPage';
+import AICaseSummaryPage from './pages/AICaseSummaryPage';
 import { initDemoData } from './utils/demoData';
 import { isLoggedIn } from './services/syncService';
 
@@ -55,7 +58,7 @@ function App() {
   }, [location]);
 
   // 隐藏底部导航的页面
-  const hideNavPaths = ['/ocr-confirm', '/record/', '/login'];
+  const hideNavPaths = ['/ocr-confirm', '/record/', '/login', '/ai/'];
   const showNav = !hideNavPaths.some(path => location.pathname.startsWith(path));
 
   return (
@@ -80,6 +83,9 @@ function App() {
             <Route path="/medication/stats" element={<MedicationStatsPage />} />
             <Route path="/family-dashboard/:patientId" element={<FamilyDashboardPage />} />
             <Route path="/vaccines" element={<VaccinesPage />} />
+            <Route path="/ai/report-analysis/:id" element={<AIReportAnalysisPage />} />
+            <Route path="/ai/visit-prep" element={<AIVisitPrepPage />} />
+            <Route path="/ai/case-summary" element={<AICaseSummaryPage />} />
             <Route path="/" element={<Navigate to="/timeline" replace />} />
           </Routes>
         </main>

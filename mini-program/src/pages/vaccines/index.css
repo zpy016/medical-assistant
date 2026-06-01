@@ -1,0 +1,155 @@
+.vax-scroll {
+  padding: 0 24rpx;
+  padding-bottom: 40rpx;
+}
+
+.progress-ring {
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring-inner {
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.vax-tabs {
+  display: flex;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 8rpx;
+  border: 2rpx solid var(--gray-200);
+}
+
+.vax-tab {
+  flex: 1;
+  text-align: center;
+  padding: 12rpx 0;
+  font-size: 24rpx;
+  color: var(--gray-500);
+  border-radius: 12rpx;
+}
+
+.vax-tab-active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.vax-group {
+  margin-bottom: 24rpx;
+}
+
+.vax-group-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+.vax-group-sub {
+  font-weight: 400;
+  color: var(--gray-500);
+}
+
+.vax-timeline {
+  position: relative;
+  padding-left: 24rpx;
+}
+
+.vax-timeline::before {
+  content: '';
+  position: absolute;
+  left: 10rpx;
+  top: 0;
+  bottom: 0;
+  width: 2rpx;
+  background: var(--gray-200);
+}
+
+.vax-dose-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16rpx;
+  position: relative;
+}
+
+.vax-dot-wrap {
+  width: 24rpx;
+  display: flex;
+  justify-content: center;
+  margin-right: 16rpx;
+  flex-shrink: 0;
+  margin-top: 24rpx;
+}
+
+.vax-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: var(--gray-300);
+  z-index: 1;
+}
+
+.vax-dot-completed {
+  background: var(--success);
+}
+
+.vax-dot-overdue {
+  background: var(--danger);
+}
+
+.vax-dose-card {
+  flex: 1;
+  margin: 0;
+}
+
+.vax-dose-card-active:active {
+  opacity: 0.8;
+}
+
+.vax-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.vax-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.4);
+}
+
+.vax-sheet {
+  position: relative;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 32rpx;
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}

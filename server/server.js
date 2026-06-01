@@ -86,6 +86,7 @@ async function callVolcengineOCR(imageBase64) {
 // 引入路由
 const authRoutes = require('./routes/auth');
 const syncRoutes = require('./routes/sync');
+const aiRoutes = require('./routes/ai');
 
 // ==================== API Routes ====================
 
@@ -139,6 +140,7 @@ app.post('/api/ocr', upload.single('image'), async (req, res) => {
 // 认证与同步路由
 app.use('/api/auth', authRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/ai', aiRoutes);
 
 // ==================== Error Handling ====================
 
@@ -156,4 +158,5 @@ app.listen(PORT, HOST, () => {
   console.log(`🚀 Medical Assistant backend running on http://${HOST}:${PORT}`);
   console.log(`📍 Health check: http://${HOST}:${PORT}/api/health`);
   console.log(`🔑 Volcengine OCR: ${process.env.VOLC_AK ? 'configured' : 'NOT CONFIGURED'}`);
+  console.log(`🤖 Ark AI: ${process.env.ARK_ENDPOINT ? 'configured (' + process.env.ARK_ENDPOINT + ')' : 'NOT CONFIGURED'}`);
 });

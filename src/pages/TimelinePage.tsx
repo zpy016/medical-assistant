@@ -12,7 +12,7 @@ import type { VisitEvent, VisitType } from '../types';
 import {
   ChevronRight, FileText, FlaskConical, Scan, Pill, Receipt,
   AlertCircle, Calendar, MapPin, Filter, X, Stethoscope,
-  Building2, Clock, Check
+  Building2, Clock, Check, Sparkles, ClipboardList
 } from 'lucide-react';
 import TodayMedicationWidget from '../components/TodayMedicationWidget';
 
@@ -219,6 +219,34 @@ export default function TimelinePage() {
 
       {/* 今日用药 Widget */}
       <TodayMedicationWidget />
+
+      {/* AI 快捷功能 */}
+      <div className="px-4 mt-3 grid grid-cols-2 gap-3">
+        <button
+          onClick={() => navigate('/ai/case-summary')}
+          className="flex items-center gap-2 px-3 py-2.5 bg-white rounded-xl border border-[var(--color-border)] text-left active:scale-[0.98] transition-transform"
+        >
+          <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4 text-blue-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">AI 病例摘要</p>
+            <p className="text-xs text-[var(--color-text-muted)]">智能整理病情</p>
+          </div>
+        </button>
+        <button
+          onClick={() => navigate('/ai/visit-prep')}
+          className="flex items-center gap-2 px-3 py-2.5 bg-white rounded-xl border border-[var(--color-border)] text-left active:scale-[0.98] transition-transform"
+        >
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+            <ClipboardList className="w-4 h-4 text-indigo-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">就诊准备</p>
+            <p className="text-xs text-[var(--color-text-muted)]">清单 & 问题</p>
+          </div>
+        </button>
+      </div>
 
       {/* 筛选栏 */}
       <div className="px-4 mt-3 flex items-center gap-2">

@@ -11,7 +11,7 @@ import { db as database } from '../db';
 import { formatDate, getDocumentTypeLabel, DOCUMENT_TYPE_CONFIG } from '../utils/helpers';
 import { analyzeTestItem, getSeverityColor } from '../utils/labAnalyzer';
 import type { DocumentType } from '../types';
-import { ArrowLeft, FileText, FlaskConical, Scan, Pill, Receipt, Trash2, Star, StarOff, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, FileText, FlaskConical, Scan, Pill, Receipt, Trash2, Star, StarOff, AlertTriangle, Sparkles } from 'lucide-react';
 
 const DOC_ICON_MAP: Record<DocumentType, typeof FileText> = {
   medical_record: FileText,
@@ -225,6 +225,17 @@ export default function RecordDetailPage() {
                       ))}
                     </div>
                   </InfoSection>
+                )}
+
+                {/* AI 报告解读入口 */}
+                {data?.testItems && data.testItems.length > 0 && (
+                  <button
+                    onClick={() => navigate(`/ai/report-analysis/${record.id}`)}
+                    className="w-full py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl flex items-center justify-center gap-2 text-sm font-medium text-blue-600 active:scale-[0.98] transition-transform"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    AI 智能解读这份报告
+                  </button>
                 )}
 
                 {/* 药品 */}

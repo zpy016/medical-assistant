@@ -1,0 +1,100 @@
+.med-scroll {
+  padding: 0 24rpx;
+  padding-bottom: 40rpx;
+}
+
+.progress-ring {
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring-inner {
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.med-route-icon {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 16rpx;
+  background: #f0fdf4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.med-route-icon-gray {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 16rpx;
+  background: var(--gray-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.med-take-btn {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  border: 4rpx solid var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.med-check-circle {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #dcfce7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.med-card {
+  margin-bottom: 16rpx;
+}
+
+.med-switch {
+  width: 80rpx;
+  height: 44rpx;
+  border-radius: 22rpx;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.med-switch-on {
+  background: var(--primary);
+}
+
+.med-switch-off {
+  background: var(--gray-300);
+}
+
+.med-switch-knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.med-switch-knob-on {
+  transform: translateX(36rpx);
+}

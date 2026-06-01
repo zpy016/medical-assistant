@@ -4,7 +4,13 @@ export default defineAppConfig({
     'pages/upload/index',
     'pages/ocrConfirm/index',
     'pages/profile/index',
-    'pages/login/index'
+    'pages/login/index',
+    'pages/abnormalTests/index',
+    'pages/abnormalTestDetail/index',
+    'pages/medications/index',
+    'pages/medicationForm/index',
+    'pages/vaccines/index',
+    'pages/familyDashboard/index'
   ],
   window: {
     backgroundTextStyle: 'light',

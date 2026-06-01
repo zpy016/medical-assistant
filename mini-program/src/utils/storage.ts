@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro';
+import type { MedicationReminder, VaccinationRecord, FollowUpReminder, MedicationLog } from './types';
 
 const PREFIX = 'medical_';
 
@@ -55,4 +56,37 @@ export function getCurrentPatient() {
 
 export function setCurrentPatient(patient: unknown) {
   setItem('current_patient', patient);
+}
+
+// P1 数据辅助
+export function getMedications(): MedicationReminder[] {
+  return getItem<MedicationReminder[]>('medications') || [];
+}
+
+export function setMedications(meds: MedicationReminder[]) {
+  setItem('medications', meds);
+}
+
+export function getVaccinationRecords(): VaccinationRecord[] {
+  return getItem<VaccinationRecord[]>('vaccination_records') || [];
+}
+
+export function setVaccinationRecords(records: VaccinationRecord[]) {
+  setItem('vaccination_records', records);
+}
+
+export function getFollowUpReminders(): FollowUpReminder[] {
+  return getItem<FollowUpReminder[]>('follow_up_reminders') || [];
+}
+
+export function setFollowUpReminders(reminders: FollowUpReminder[]) {
+  setItem('follow_up_reminders', reminders);
+}
+
+export function getMedicationLogs(): MedicationLog[] {
+  return getItem<MedicationLog[]>('medication_logs') || [];
+}
+
+export function setMedicationLogs(logs: MedicationLog[]) {
+  setItem('medication_logs', logs);
 }

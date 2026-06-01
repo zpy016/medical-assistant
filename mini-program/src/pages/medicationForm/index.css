@@ -1,0 +1,59 @@
+.form-scroll {
+  padding: 0 24rpx;
+  padding-bottom: 40rpx;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  font-size: 26rpx;
+  color: var(--gray-700);
+  margin-bottom: 8rpx;
+  font-weight: 500;
+}
+
+.form-input {
+  padding: 20rpx 24rpx;
+  border: 2rpx solid var(--gray-200);
+  border-radius: var(--radius-md);
+  font-size: 28rpx;
+  color: var(--gray-800);
+  background: transparent;
+}
+
+.form-picker {
+  padding: 20rpx 24rpx;
+  border: 2rpx solid var(--gray-200);
+  border-radius: var(--radius-md);
+  font-size: 28rpx;
+  color: var(--gray-800);
+  background: #fff;
+}
+
+.form-textarea {
+  padding: 20rpx 24rpx;
+  border: 2rpx solid var(--gray-200);
+  border-radius: var(--radius-md);
+  font-size: 28rpx;
+  color: var(--gray-800);
+  background: transparent;
+  min-height: 120rpx;
+}
+
+.form-checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid var(--gray-300);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-checkbox-checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
