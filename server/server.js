@@ -146,6 +146,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/admin/reset-keys', require('./routes/resetKey'));
+app.use('/api/images', require('./routes/images'));
 
 // ==================== Error Handling ====================
 

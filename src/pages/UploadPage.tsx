@@ -10,11 +10,13 @@ import { useRecordStore } from '../stores/recordStore';
 import { performOCR } from '../services/ocrService';
 import { parseOCRResult } from '../services/ocrService';
 import { compressImage } from '../utils/helpers';
+import { uploadImageToTOS } from '../services/imageService';
+import { isLoggedIn } from '../services/syncService';
 import { Camera, ImagePlus, FileUp, X, Loader2, CheckCircle2 } from 'lucide-react';
 
 export default function UploadPage() {
   const navigate = useNavigate();
-  const { uploadTasks, addUploadTask, updateTaskStatus, setTaskOCRResult, removeUploadTask } = useRecordStore();
+  const { uploadTasks, addUploadTask, updateTaskStatus, setTaskOCRResult, setTaskObjectKey, removeUploadTask } = useRecordStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
@@ -32,8 +34,19 @@ export default function UploadPage() {
         const compressed = await compressImage(file, 1920, 0.85);
         const compressedFile = new File([compressed], file.name, { type: 'image/jpeg' });
 
+        // 如果已登录，同时上传原图到 TOS
+        if (isLoggedIn()) {
+          try {
+            updateTaskStatus(taskId, 'uploading', 40);
+            const uploadResult = await uploadImageToTOS(file);
+            setTaskObjectKey(taskId, uploadResult.objectKey);
+          } catch (uploadErr) {
+            console.warn('TOS upload failed (will use local blob):', uploadErr);
+          }
+        }
+
         // OCR识别
-        updateTaskStatus(taskId, 'processing', 50);
+        updateTaskStatus(taskId, 'processing', 60);
         const ocrResult = await performOCR(compressedFile);
 
         updateTaskStatus(taskId, 'processing', 90);

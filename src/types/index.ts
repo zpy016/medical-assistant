@@ -216,6 +216,7 @@ export interface UploadTask {
   ocrResult?: OCRResult;
   error?: string;
   createdAt: number;
+  objectKey?: string; // TOS 对象键
 }
 
 /** 筛选条件 */

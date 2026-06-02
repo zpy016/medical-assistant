@@ -3,13 +3,14 @@
  * 展示单份病历的完整信息：原图、OCR结果、结构化数据
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecordStore } from '../stores/recordStore';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db as database } from '../db';
 import { formatDate, getDocumentTypeLabel, DOCUMENT_TYPE_CONFIG } from '../utils/helpers';
 import { analyzeTestItem, getSeverityColor } from '../utils/labAnalyzer';
+import { getImagePresignedUrl } from '../services/imageService';
 import type { DocumentType } from '../types';
 import { ArrowLeft, FileText, FlaskConical, Scan, Pill, Receipt, Trash2, Star, StarOff, AlertTriangle, Sparkles } from 'lucide-react';
 
@@ -30,12 +31,36 @@ export default function RecordDetailPage() {
   const navigate = useNavigate();
   const { deleteRecord, toggleStarRecord } = useRecordStore();
   const [showOriginal, setShowOriginal] = useState(true);
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [imageLoading, setImageLoading] = useState(false);
 
   // 实时查询
   const record = useLiveQuery(
     () => id ? database.records.get(id) : undefined,
     [id]
   );
+
+  // 获取图片预签名 URL
+  useEffect(() => {
+    if (!record?.originalImage) {
+      setImageUrl('');
+      return;
+    }
+    // 如果是 blob: 或 data: URL，直接使用
+    if (record.originalImage.startsWith('blob:') || record.originalImage.startsWith('data:')) {
+      setImageUrl(record.originalImage);
+      return;
+    }
+    // 否则认为是 TOS objectKey，获取预签名 URL
+    setImageLoading(true);
+    getImagePresignedUrl(record.originalImage, 3600)
+      .then(url => setImageUrl(url))
+      .catch(err => {
+        console.error('Failed to get presigned URL:', err);
+        setImageUrl('');
+      })
+      .finally(() => setImageLoading(false));
+  }, [record?.originalImage]);
 
   if (!record) {
     return (
@@ -132,20 +157,26 @@ export default function RecordDetailPage() {
       <div className="px-4 py-4 pb-20">
         {showOriginal ? (
           <div className="rounded-xl overflow-hidden border border-[var(--color-border)] bg-gray-50">
-            <img
-              src={record.originalImage}
-              alt="病历原图"
-              className="w-full object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = '';
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-            {!record.originalImage.startsWith('blob:') && !record.originalImage.startsWith('data:') && (
+            {imageLoading ? (
+              <div className="p-8 text-center text-sm text-[var(--color-text-muted)]">
+                <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p>正在加载原图...</p>
+              </div>
+            ) : imageUrl ? (
+              <img
+                src={imageUrl}
+                alt="病历原图"
+                className="w-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '';
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
               <div className="p-8 text-center text-sm text-[var(--color-text-muted)]">
                 <FileText className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                <p>演示数据：原图仅在本地存储时可用</p>
-                <p className="text-xs mt-1">实际使用时此处显示上传的原始图片</p>
+                <p>原图暂不可用</p>
+                <p className="text-xs mt-1">请重新上传或检查网络</p>
               </div>
             )}
           </div>

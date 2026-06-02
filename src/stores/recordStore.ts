@@ -58,6 +58,7 @@ interface RecordState {
   removeUploadTask: (id: string) => void;
   updateTaskStatus: (id: string, status: UploadTask['status'], progress?: number) => void;
   setTaskOCRResult: (id: string, ocrResult: OCRResult) => void;
+  setTaskObjectKey: (id: string, objectKey: string) => void;
   confirmRecord: (taskId: string, structuredData: StructuredData, documentType: DocumentType) => Promise<void>;
 
   // 记录管理
@@ -210,6 +211,13 @@ export const useRecordStore = create<RecordState>((set, get) => ({
     }));
   },
 
+  setTaskObjectKey: (id, objectKey) => {
+    set(state => ({
+      uploadTasks: state.uploadTasks.map(t =>
+        t.id === id ? { ...t, objectKey } : t
+      ),
+    }));
+  },
   confirmRecord: async (taskId, structuredData, documentType) => {
     const task = get().uploadTasks.find(t => t.id === taskId);
     if (!task) return;
@@ -220,7 +228,7 @@ export const useRecordStore = create<RecordState>((set, get) => ({
     const record: MedicalRecord = {
       id: generateId(),
       patientId,
-      originalImage: task.previewUrl,
+      originalImage: task.objectKey || task.previewUrl,
       ocrResult: task.ocrResult,
       structuredData,
       documentType,

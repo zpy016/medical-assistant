@@ -245,6 +245,21 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_admin_logs_created ON admin_logs(created_at);
   `);
 
+  // 图片访问审计日志表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS image_access_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      object_key TEXT NOT NULL,
+      ip TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_image_logs_user ON image_access_logs(user_id);
+    CREATE INDEX IF NOT EXISTS idx_image_logs_action ON image_access_logs(action);
+    CREATE INDEX IF NOT EXISTS idx_image_logs_created ON image_access_logs(created_at);
+  `);
+
   // 用户活跃记录表（用于DAU/MAU统计）
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_activity (
@@ -752,6 +767,13 @@ function getSharedPatientData(userId, patientId) {
 
 // ==================== 数据导出 ====================
 
+function logImageAccess({ userId, action, objectKey, ip }) {
+  db.prepare(`
+    INSERT INTO image_access_logs (user_id, action, object_key, ip, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(userId, action, objectKey, ip || '', Date.now());
+}
+
 function exportUserData(userId) {
   const patients = getPatientsByUser(userId);
   const records = getRecordsByUser(userId);
@@ -818,6 +840,8 @@ module.exports = {
   getFamilyMembersByInvitedUserWithDetails,
   getAcceptedFamilyMembersByInvitedUser,
   getSharedPatientData,
+  // 图片审计日志
+  logImageAccess,
   // 导出
   exportUserData,
 };
