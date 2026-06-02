@@ -60,11 +60,13 @@ export async function addPatient(patient: Omit<Patient, 'createdAt' | 'updatedAt
     updatedAt: now,
   };
   await db.patients.put(newPatient);
+  notifyDataChange();
   return newPatient.id;
 }
 
 export async function updatePatient(id: string, changes: Partial<Patient>): Promise<void> {
   await db.patients.update(id, { ...changes, updatedAt: Date.now() });
+  notifyDataChange();
 }
 
 export async function setDefaultPatient(id: string): Promise<void> {
@@ -92,15 +94,18 @@ export async function addRecord(record: Omit<MedicalRecord, 'createdAt' | 'updat
     updatedAt: now,
   };
   await db.records.put(newRecord);
+  notifyDataChange();
   return newRecord.id;
 }
 
 export async function updateRecord(id: string, changes: Partial<MedicalRecord>): Promise<void> {
   await db.records.update(id, { ...changes, updatedAt: Date.now() });
+  notifyDataChange();
 }
 
 export async function deleteRecord(id: string): Promise<void> {
   await db.records.delete(id);
+  notifyDataChange();
 }
 
 // ==================== Visit Event CRUD ====================
@@ -114,10 +119,12 @@ export async function getAllVisitEvents(patientId?: string): Promise<VisitEvent[
 
 export async function addVisitEvent(event: VisitEvent): Promise<void> {
   await db.visitEvents.put(event);
+  notifyDataChange();
 }
 
 export async function updateVisitEvent(id: string, changes: Partial<VisitEvent>): Promise<void> {
   await db.visitEvents.update(id, changes);
+  notifyDataChange();
 }
 
 // ==================== Family Members ====================
@@ -181,7 +188,26 @@ export async function clearAllData(): Promise<void> {
     db.visitEvents.clear(),
     db.familyMembers.clear(),
     db.followUpReminders.clear(),
+    db.medications.clear(),
+    db.medicationLogs.clear(),
+    db.vaccinationRecords.clear(),
+    db.settings.clear(),
   ]);
+}
+
+// ==================== 自动同步钩子 ====================
+
+let onDataChangeCallback: (() => void) | null = null;
+
+export function setOnDataChange(callback: (() => void) | null): void {
+  onDataChangeCallback = callback;
+}
+
+function notifyDataChange(): void {
+  if (onDataChangeCallback) {
+    // 使用 setTimeout 避免阻塞 UI
+    setTimeout(() => onDataChangeCallback!(), 0);
+  }
 }
 
 // ==================== Follow Up Reminders ====================
@@ -203,10 +229,12 @@ export async function getPendingFollowUps(patientId?: string): Promise<FollowUpR
 
 export async function addFollowUpReminder(reminder: Omit<FollowUpReminder, 'createdAt'>): Promise<void> {
   await db.followUpReminders.put({ ...reminder, createdAt: Date.now() });
+  notifyDataChange();
 }
 
 export async function updateFollowUpReminder(id: string, changes: Partial<FollowUpReminder>): Promise<void> {
   await db.followUpReminders.update(id, changes);
+  notifyDataChange();
 }
 
 export async function completeFollowUpReminder(id: string): Promise<void> {
@@ -215,6 +243,7 @@ export async function completeFollowUpReminder(id: string): Promise<void> {
 
 export async function deleteFollowUpReminder(id: string): Promise<void> {
   await db.followUpReminders.delete(id);
+  notifyDataChange();
 }
 
 // ==================== Medications ====================
@@ -229,15 +258,18 @@ export async function getMedications(patientId?: string): Promise<MedicationRemi
 export async function addMedication(medication: Omit<MedicationReminder, 'createdAt' | 'updatedAt'>): Promise<void> {
   const now = Date.now();
   await db.medications.put({ ...medication, createdAt: now, updatedAt: now });
+  notifyDataChange();
 }
 
 export async function updateMedication(id: string, changes: Partial<MedicationReminder>): Promise<void> {
   await db.medications.update(id, { ...changes, updatedAt: Date.now() });
+  notifyDataChange();
 }
 
 export async function deleteMedication(id: string): Promise<void> {
   await db.medications.delete(id);
   await db.medicationLogs.where('medicationId').equals(id).delete();
+  notifyDataChange();
 }
 
 // ==================== Medication Logs ====================
@@ -279,14 +311,17 @@ export async function getVaccinationRecords(patientId: string): Promise<Vaccinat
 export async function addVaccinationRecord(record: Omit<VaccinationRecord, 'createdAt' | 'updatedAt'>): Promise<void> {
   const now = Date.now();
   await db.vaccinationRecords.put({ ...record, createdAt: now, updatedAt: now });
+  notifyDataChange();
 }
 
 export async function updateVaccinationRecord(id: string, changes: Partial<VaccinationRecord>): Promise<void> {
   await db.vaccinationRecords.update(id, { ...changes, updatedAt: Date.now() });
+  notifyDataChange();
 }
 
 export async function deleteVaccinationRecord(id: string): Promise<void> {
   await db.vaccinationRecords.delete(id);
+  notifyDataChange();
 }
 
 export async function generateVaccinationPlan(patientId: string, birthDate: string): Promise<void> {

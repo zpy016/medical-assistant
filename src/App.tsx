@@ -36,6 +36,8 @@ import AdminResetKeysPage from './pages/AdminResetKeysPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import SharedPatientViewPage from './pages/SharedPatientViewPage';
 import { initDemoData } from './utils/demoData';
+import { setOnDataChange } from './db';
+import { autoSync, isLoggedIn } from './services/syncService';
 
 function App() {
   const location = useLocation();
@@ -55,6 +57,17 @@ function App() {
       await loadVisitEvents();
     };
     init();
+
+    // 注册数据变更自动同步回调
+    setOnDataChange(() => {
+      if (isLoggedIn()) {
+        autoSync().catch(() => {});
+      }
+    });
+
+    return () => {
+      setOnDataChange(null);
+    };
   }, []);
 
   // 同步Tab状态到路由

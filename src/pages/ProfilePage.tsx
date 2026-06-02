@@ -18,7 +18,7 @@ import {
   Users, User, Download, Trash2, Settings, Shield,
   ChevronRight, FileJson, FileSpreadsheet, AlertTriangle,
   Plus, X, Check, UserPlus, Eye, Pencil, UserCog,
-  Cloud, CloudOff, LogOut, LogIn, RefreshCw,
+  Cloud, CloudOff, LogOut, LogIn, RefreshCw, Lock, LockKeyhole,
   FlaskConical, Pill, Syringe, HeartPulse, Activity,
   Share2, Phone, Bell, Send, CheckCircle2, XCircle
 } from 'lucide-react';
@@ -67,6 +67,17 @@ export default function ProfilePage() {
   const [shareError, setShareError] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
   const [shareTab, setShareTab] = useState<'received' | 'sent'>('received');
+
+  // 修改密码
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [changePasswordMessage, setChangePasswordMessage] = useState('');
+
+  // 清除数据确认
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // 加载家庭成员
   useEffect(() => {
@@ -249,6 +260,58 @@ export default function ProfilePage() {
   const handleLogout = () => {
     clearAuthToken();
     setLoggedIn(false);
+    window.location.reload();
+  };
+
+  const handleChangePassword = async () => {
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setChangePasswordMessage('请填写所有字段');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setChangePasswordMessage('新密码至少6位');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setChangePasswordMessage('两次输入的新密码不一致');
+      return;
+    }
+    setChangePasswordLoading(true);
+    setChangePasswordMessage('');
+    try {
+      const token = localStorage.getItem('medical_auth_token');
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setChangePasswordMessage(data.error || '修改失败');
+      } else {
+        setChangePasswordMessage('密码修改成功，请重新登录');
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setShowChangePassword(false);
+          setChangePasswordMessage('');
+          handleLogout();
+        }, 1500);
+      }
+    } catch (e: any) {
+      setChangePasswordMessage(e.message || '网络错误');
+    } finally {
+      setChangePasswordLoading(false);
+    }
+  };
+
+  const handleClearDataConfirmed = async () => {
+    await clearAllData();
+    setShowClearConfirm(false);
     window.location.reload();
   };
 
@@ -703,6 +766,13 @@ export default function ProfilePage() {
                   <p className="text-[10px] text-center text-[var(--color-primary)]">{syncMessage}</p>
                 )}
                 <button
+                  onClick={() => setShowChangePassword(true)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-[var(--color-text-secondary)] text-xs border border-[var(--color-border)] rounded-lg"
+                >
+                  <LockKeyhole className="w-3.5 h-3.5" />
+                  修改密码
+                </button>
+                <button
                   onClick={handleLogout}
                   className="w-full flex items-center justify-center gap-1.5 py-2 text-[var(--color-danger)] text-xs"
                 >
@@ -755,12 +825,12 @@ export default function ProfilePage() {
           </button>
           <div className="mx-4 h-px bg-[var(--color-border)]/50" />
           <button
-            onClick={handleClearData}
+            onClick={() => setShowClearConfirm(true)}
             className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-red-50 transition-colors"
           >
             <div className="flex items-center gap-3">
               <Trash2 className="w-4 h-4 text-[var(--color-danger)]" />
-              <span className="text-sm text-[var(--color-danger)]">清除所有数据</span>
+              <span className="text-sm text-[var(--color-danger)]">清除所有本地数据</span>
             </div>
             <ChevronRight className="w-4 h-4 text-[var(--color-danger)]" />
           </button>
@@ -885,6 +955,105 @@ export default function ProfilePage() {
                 className="flex-1 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 {shareLoading ? '发送中...' : '确认分享'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 修改密码弹窗 */}
+      {showChangePassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--color-border)]/50 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">修改密码</h3>
+              <button onClick={() => { setShowChangePassword(false); setChangePasswordMessage(''); }} className="p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-3">
+              <div>
+                <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">当前密码</label>
+                <input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)]"
+                  placeholder="输入当前密码"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">新密码</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)]"
+                  placeholder="至少6位"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-[var(--color-text-secondary)] mb-1 block">确认新密码</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-[var(--color-border)] rounded-lg outline-none focus:border-[var(--color-primary)]"
+                  placeholder="再次输入新密码"
+                />
+              </div>
+              {changePasswordMessage && (
+                <p className={`text-xs text-center ${changePasswordMessage.includes('成功') ? 'text-green-600' : 'text-[var(--color-danger)]'}`}>
+                  {changePasswordMessage}
+                </p>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-[var(--color-border)]/50 flex gap-2">
+              <button
+                onClick={() => { setShowChangePassword(false); setChangePasswordMessage(''); }}
+                className="flex-1 py-2 bg-[var(--color-bg)] text-[var(--color-text-secondary)] rounded-lg text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleChangePassword}
+                disabled={changePasswordLoading}
+                className="flex-1 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {changePasswordLoading ? '修改中...' : '确认修改'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 清除数据确认弹窗 */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--color-border)]/50">
+              <h3 className="text-sm font-semibold text-[var(--color-danger)]">⚠️ 清除所有本地数据</h3>
+            </div>
+            <div className="px-4 py-4">
+              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                此操作将永久删除浏览器中存储的所有病历、患者、用药等数据，且不可恢复。
+              </p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-2">
+                如果您已登录，云端数据不受影响。清除后请重新上传病历照片。
+              </p>
+            </div>
+            <div className="px-4 py-3 border-t border-[var(--color-border)]/50 flex gap-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 py-2 bg-[var(--color-bg)] text-[var(--color-text-secondary)] rounded-lg text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleClearDataConfirmed}
+                className="flex-1 py-2 bg-[var(--color-danger)] text-white rounded-lg text-sm font-medium"
+              >
+                确认清除
               </button>
             </div>
           </div>
