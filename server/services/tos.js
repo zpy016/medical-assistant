@@ -1,96 +1,125 @@
 /**
- * 火山引擎 TOS (对象存储) 服务封装
- * 负责图片上传、预签名URL生成、删除
+ * 图片本地存储服务（替代 TOS）
+ * 图片存储在服务器本地磁盘，通过带签名的临时 URL 访问
+ * 未来可平滑迁移到 TOS：只需替换此文件，保持接口不变
  */
 
-const { TOS } = require('@volcengine/tos-sdk');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
-// TOS 配置
-const TOS_REGION = process.env.TOS_REGION || 'cn-beijing';
-const TOS_ENDPOINT = process.env.TOS_ENDPOINT || `tos-${TOS_REGION}.volces.com`;
-const TOS_BUCKET = process.env.TOS_BUCKET || '';
-const VOLC_AK = process.env.VOLC_AK || '';
-const VOLC_SK = process.env.VOLC_SK || '';
+const IMAGE_DIR = process.env.IMAGE_STORAGE_PATH || '/opt/medical-server/images';
+const URL_SECRET = process.env.JWT_SECRET || 'medical-assistant-secret-key';
 
-let client = null;
-
-function getClient() {
-  if (!client) {
-    if (!VOLC_AK || !VOLC_SK || !TOS_BUCKET) {
-      throw new Error('TOS not configured: missing VOLC_AK, VOLC_SK or TOS_BUCKET');
-    }
-    client = new TOS({
-      accessKeyId: VOLC_AK,
-      accessKeySecret: VOLC_SK,
-      region: TOS_REGION,
-      endpoint: TOS_ENDPOINT,
-      secure: true,
-    });
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
-  return client;
+}
+
+function generateFileKey(userId, originalName) {
+  const ext = path.extname(originalName) || '.jpg';
+  return `u_${userId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+}
+
+function getFilePath(objectKey) {
+  return path.join(IMAGE_DIR, objectKey);
 }
 
 /**
- * 上传图片到 TOS
- * @param {string} objectKey - 对象键，如 records/2024/01/abc123.jpg
- * @param {Buffer} buffer - 图片二进制数据
- * @param {string} contentType - MIME 类型
- * @returns {Promise<{ objectKey: string, etag: string }>}
+ * 上传图片到本地磁盘
  */
 async function uploadImage(objectKey, buffer, contentType = 'image/jpeg') {
-  const tos = getClient();
-  const res = await tos.putObject({
-    bucket: TOS_BUCKET,
-    key: objectKey,
-    body: buffer,
-    contentType,
-    // 服务端加密
-    serverSideEncryption: 'AES256',
-  });
+  const filePath = getFilePath(objectKey);
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(filePath, buffer);
+  return { objectKey, etag: '' };
+}
+
+/**
+ * 生成带签名的临时访问 URL（替代 TOS 预签名 URL）
+ * @param {string} objectKey
+ * @param {number} expires - 有效期秒数
+ * @returns {string} 带签名的本地访问 URL
+ */
+function getPresignedUrl(objectKey, expires = 3600) {
+  const expiresAt = Math.floor(Date.now() / 1000) + expires;
+  const sign = crypto
+    .createHmac('sha256', URL_SECRET)
+    .update(`${objectKey}:${expiresAt}`)
+    .digest('hex');
+  return `/api/images/access/${encodeURIComponent(objectKey)}?expires=${expiresAt}&sign=${sign}`;
+}
+
+/**
+ * 验证访问签名
+ */
+function verifyAccessSign(objectKey, expires, sign) {
+  const now = Math.floor(Date.now() / 1000);
+  if (now > parseInt(expires, 10)) {
+    return false;
+  }
+  const expected = crypto
+    .createHmac('sha256', URL_SECRET)
+    .update(`${objectKey}:${expires}`)
+    .digest('hex');
+  return sign === expected;
+}
+
+/**
+ * 删除本地图片
+ */
+async function deleteImage(objectKey) {
+  const filePath = getFilePath(objectKey);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
+
+/**
+ * 检查文件是否存在
+ */
+function exists(objectKey) {
+  return fs.existsSync(getFilePath(objectKey));
+}
+
+/**
+ * 获取文件信息
+ */
+function getFileInfo(objectKey) {
+  const filePath = getFilePath(objectKey);
+  if (!fs.existsSync(filePath)) return null;
+  const stat = fs.statSync(filePath);
+  const ext = path.extname(objectKey).toLowerCase();
+  const mimeMap = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+  };
   return {
-    objectKey,
-    etag: res['x-tos-version-id'] || res['x-tos-hash-crc64ecma'] || '',
+    path: filePath,
+    size: stat.size,
+    contentType: mimeMap[ext] || 'application/octet-stream',
   };
 }
 
 /**
- * 生成预签名 URL（用于前端查看原图）
- * @param {string} objectKey
- * @param {number} expires - 有效期秒数，默认 3600
- * @returns {string} 预签名 URL
- */
-function getPresignedUrl(objectKey, expires = 3600) {
-  const tos = getClient();
-  return tos.getPreSignedUrl({
-    bucket: TOS_BUCKET,
-    key: objectKey,
-    method: 'GET',
-    expires,
-  });
-}
-
-/**
- * 删除 TOS 对象
- * @param {string} objectKey
- */
-async function deleteImage(objectKey) {
-  const tos = getClient();
-  await tos.deleteObject({
-    bucket: TOS_BUCKET,
-    key: objectKey,
-  });
-}
-
-/**
- * 检查 TOS 是否已配置
+ * 始终可用（本地磁盘）
  */
 function isConfigured() {
-  return !!(VOLC_AK && VOLC_SK && TOS_BUCKET);
+  return true;
 }
 
 module.exports = {
   uploadImage,
   getPresignedUrl,
+  verifyAccessSign,
   deleteImage,
+  exists,
+  getFileInfo,
   isConfigured,
+  IMAGE_DIR,
 };
